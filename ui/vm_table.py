@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QLineEdit
 )
 from PyQt6.QtCore import Qt
+import re
 
 
 class VmTable(QWidget):
@@ -71,7 +72,7 @@ class VmTable(QWidget):
             }
             QPushButton:hover {
                 background-color: #4c4c4c;
-                color: ##2d2d2d;
+                color: #cccccc;
             }
         """)
         
@@ -95,7 +96,7 @@ class VmTable(QWidget):
             }
             QPushButton:hover {
                 background-color: #4c4c4c;
-                color: ##2d2d2d;
+                color: #cccccc;
             }
         """
         
@@ -115,10 +116,13 @@ class VmTable(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         
-        # ❌ ОТКЛЮЧАЕМ чередование цветов (зебру)
+        # Отключаем вертикальную колонку с номерами строк (убирает белую полосу)
+        self.table.verticalHeader().setVisible(False)
+        
+        # Отключаем чередование цветов (зебру)
         self.table.setAlternatingRowColors(False)
         
-        # Единый стиль для всей таблицы (без обводок, без белых строк)
+        # Единый стиль для всей таблицы (тёмные заголовки, без белых строк)
         self.table.setStyleSheet("""
             QTableWidget {
                 background-color: #2d2d2d;
@@ -133,6 +137,18 @@ class VmTable(QWidget):
             }
             QTableWidget::item:selected {
                 background-color: #0e639c;
+            }
+            QHeaderView::section {
+                background-color: #252526;
+                color: #cccccc;
+                padding: 5px;
+                border: none;
+                border-right: 1px solid #3c3c3c;
+                border-bottom: 1px solid #3c3c3c;
+            }
+            QTableCornerButton::section {
+                background-color: #252526;
+                border: none;
             }
         """)
         
@@ -282,14 +298,49 @@ class VmTable(QWidget):
             })
         return variables
     
-    def import_from_select(self, url: str, xpath: str, text: str, tag: str):
-        """Импортирует данные из режима Select в таблицу"""
-        var_name = f"{tag.lower()}_{self.table.rowCount()}"
+    def import_from_select(self, url: str, xpath: str, text: str, tag: str, alt: str = ""):
+        """Импортирует данные из режима Select в таблицу с умным именованием"""
+        
+        # Определяем базовое имя по приоритетам:
+        # 1. Если есть text (не пустой) → используем text
+        # 2. Если это картинка (tag == IMG) и есть alt → используем alt
+        # 3. Иначе → empty
+        if text and text.strip():
+            base_name = text.strip()[:30]
+        elif tag.upper() == "IMG" and alt and alt.strip():
+            base_name = alt.strip()[:30]
+        else:
+            base_name = "empty"
+        
+        # Очищаем имя от недопустимых символов
+        base_name = re.sub(r'[^a-zA-Z0-9_а-яА-ЯёЁ\s-]', '', base_name)
+        base_name = base_name.replace(' ', '_')
+        
+        # Если после очистки имя пустое, используем "empty"
+        if not base_name:
+            base_name = "empty"
+        
+        # Проверяем, сколько раз уже встречалось такое имя
+        existing_names = []
+        for row in range(self.table.rowCount()):
+            name_item = self.table.item(row, 0)
+            if name_item:
+                existing_names.append(name_item.text())
+        
+        # Если имя уже существует, добавляем номер
+        final_name = base_name
+        counter = 1
+        while final_name in existing_names:
+            counter += 1
+            final_name = f"{base_name}_{counter}"
+        
+        # Добавляем переменную в таблицу
         self.add_variable(
-            name=var_name,
+            name=final_name,
             xpath=xpath,
             var_type="Static",
             url=url,
-            sample=text[:50] if text else ""
+            sample=text[:50] if text else (alt[:50] if alt else "")
         )
-        return var_name
+        
+        return final_name

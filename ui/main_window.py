@@ -24,25 +24,22 @@ class CustomWebEnginePage(QWebEnginePage):
     
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
         """Перехватывает сообщения из console.log"""
-        # Проверяем, не наше ли это сообщение
         if message.startswith('[UPB_SELECT]'):
             try:
-                # Извлекаем JSON после префикса
                 json_str = message.replace('[UPB_SELECT]', '')
                 data = json.loads(json_str)
                 
-                # Отправляем в главное окно
                 if self.main_window:
                     self.main_window.on_selector_captured(
                         url=data.get('url', ''),
                         xpath=data.get('xpath', ''),
                         text=data.get('text', ''),
-                        tag=data.get('tag', '')
+                        tag=data.get('tag', ''),
+                        alt=data.get('alt', '')
                     )
             except json.JSONDecodeError as e:
                 print(f"JSON parse error: {e}")
         else:
-            # Обычные сообщения консоли
             super().javaScriptConsoleMessage(level, message, lineNumber, sourceID)
 
 
@@ -52,16 +49,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("UPB - Universal Parser Builder")
         self.setGeometry(100, 100, 1400, 900)
         
-        # Убираем системные кнопки окна
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        
-        # Для перемещения окна
         self.drag_pos = None
         
-        # Включаем Remote Debugging
         os.environ['QTWEBENGINE_REMOTE_DEBUGGING'] = '9222'
         
-        # Общий стиль окна
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #2d2d2d;
@@ -71,36 +63,29 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        # Центральный виджет
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # ========== ВЕРХНИЙ АПБАР ==========
         self.create_top_bar()
         main_layout.addWidget(self.top_bar)
         
-        # ========== СТЕК ВКЛАДОК ==========
         self.content_stack = QStackedWidget()
-        self.content_stack.addWidget(self.create_browser_view())   # index 0 - Browser
-        self.content_stack.addWidget(self.create_project_panel())  # index 1 - Project
-        self.content_stack.addWidget(self.create_vm_panel())       # index 2 - VM
-        self.content_stack.addWidget(self.create_build_panel())    # index 3 - Build
-        self.content_stack.addWidget(self.create_test_panel())     # index 4 - Test
-        
+        self.content_stack.addWidget(self.create_browser_view())
+        self.content_stack.addWidget(self.create_project_panel())
+        self.content_stack.addWidget(self.create_vm_panel())
+        self.content_stack.addWidget(self.create_build_panel())
+        self.content_stack.addWidget(self.create_test_panel())
         main_layout.addWidget(self.content_stack, 1)
         
-        # ========== НИЖНЯЯ ПАНЕЛЬ ==========
         self.create_bottom_panel()
         main_layout.addWidget(self.bottom_frame)
         
-        # Логируем старт
         self.log("UPB Ready | Select mode: OFF")
     
     def create_top_bar(self):
-        """Создание верхнего апбара с вкладками и кнопками окна"""
         self.top_bar = QFrame()
         self.top_bar.setMaximumHeight(40)
         self.top_bar.setStyleSheet("""
@@ -114,17 +99,14 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(10, 0, 10, 0)
         layout.setSpacing(20)
         
-        # Логотип UPB
         logo = QLabel("UPB")
         logo.setStyleSheet("color: #0e639c; font-weight: bold; font-size: 14px;")
         layout.addWidget(logo)
         
-        # Разделитель
         separator = QLabel("│")
         separator.setStyleSheet("color: #787878;")
         layout.addWidget(separator)
         
-        # Кнопки вкладок
         self.tab_browser = QPushButton("Browser")
         self.tab_project = QPushButton("Project")
         self.tab_vm = QPushButton("VM")
@@ -148,10 +130,8 @@ class MainWindow(QMainWindow):
             tab.setStyleSheet(tab_style)
             layout.addWidget(tab)
         
-        # Растяжка (чтобы кнопки окна были справа)
         layout.addStretch()
         
-        # Кнопки управления окном
         self.btn_min = QPushButton("—")
         self.btn_max = QPushButton("□")
         self.btn_close = QPushButton("✕")
@@ -196,14 +176,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.btn_max)
         layout.addWidget(self.btn_close)
         
-        # Подключаем переключение вкладок
         self.tab_browser.clicked.connect(lambda: self.switch_tab(0))
         self.tab_project.clicked.connect(lambda: self.switch_tab(1))
         self.tab_vm.clicked.connect(lambda: self.switch_tab(2))
         self.tab_build.clicked.connect(lambda: self.switch_tab(3))
         self.tab_test.clicked.connect(lambda: self.switch_tab(4))
         
-        # Устанавливаем активную вкладку по умолчанию
         self.tab_browser.setStyleSheet("""
             QPushButton {
                 background-color: #3c3c3c;
@@ -215,7 +193,6 @@ class MainWindow(QMainWindow):
         self.current_tab_index = 0
     
     def create_browser_view(self):
-        """Вкладка Browser: BrowserWidget (85%) + DevToolsPanel (15%)"""
         panel = QWidget()
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -223,7 +200,6 @@ class MainWindow(QMainWindow):
         
         self.browser_widget = BrowserWidget()
         
-        # Заменяем стандартную страницу на кастомную для перехвата console.log
         custom_page = CustomWebEnginePage(self)
         self.browser_widget.web_view.setPage(custom_page)
         
@@ -241,10 +217,8 @@ class MainWindow(QMainWindow):
         return panel
     
     def create_project_panel(self):
-        """Вкладка Project — управление проектами"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        
         label = QLabel("📁 Project Management\n\n"
                       "• New Project — создать новый проект\n"
                       "• Load Project — загрузить существующий\n"
@@ -253,25 +227,19 @@ class MainWindow(QMainWindow):
         label.setStyleSheet("color: #cccccc; font-size: 14px; padding: 20px;")
         label.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(label)
-        
         return widget
     
     def create_vm_panel(self):
-        """Вкладка VM — Variables Manager"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        
         self.vm_table = VmTable()
         layout.addWidget(self.vm_table)
-        
         return widget
     
     def create_build_panel(self):
-        """Вкладка Build — настройка сборки"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        
         label = QLabel("🔧 Build Configuration\n\n"
                       "• Output format: Excel (.xlsx)\n"
                       "• Telegram bot: coming soon...\n"
@@ -280,14 +248,11 @@ class MainWindow(QMainWindow):
         label.setStyleSheet("color: #cccccc; font-size: 14px; padding: 20px;")
         label.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(label)
-        
         return widget
     
     def create_test_panel(self):
-        """Вкладка Test — тестовый запуск"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        
         label = QLabel("🧪 Test Mode\n\n"
                       "• Run parser in debug mode\n"
                       "• Preview results before build\n"
@@ -296,16 +261,13 @@ class MainWindow(QMainWindow):
         label.setStyleSheet("color: #cccccc; font-size: 14px; padding: 20px;")
         label.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(label)
-        
         return widget
     
     def create_bottom_panel(self):
-        """Создание нижней панели: консоль (слева) + tools (справа)"""
         bottom_layout = QHBoxLayout()
         bottom_layout.setContentsMargins(5, 2, 5, 2)
         bottom_layout.setSpacing(10)
         
-        # ========== КОНСОЛЬ (левая часть) ==========
         console_container = QWidget()
         console_container.setMaximumHeight(80)
         console_layout = QVBoxLayout(console_container)
@@ -331,7 +293,6 @@ class MainWindow(QMainWindow):
         console_layout.addWidget(self.console_label)
         console_layout.addWidget(self.console_text)
         
-        # ========== TOOLS (правая часть) ==========
         tools_widget = QWidget()
         tools_widget.setMaximumHeight(80)
         tools_widget.setMaximumWidth(200)
@@ -370,11 +331,9 @@ class MainWindow(QMainWindow):
         tools_layout.addWidget(self.btn_run)
         tools_layout.addStretch()
         
-        # Добавляем обе части
         bottom_layout.addWidget(console_container, 1)
         bottom_layout.addWidget(tools_widget)
         
-        # Рамка для нижней панели
         self.bottom_frame = QFrame()
         self.bottom_frame.setLayout(bottom_layout)
         self.bottom_frame.setMaximumHeight(80)
@@ -385,17 +344,14 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        # Подключаем сигналы
         self.btn_select.clicked.connect(self.toggle_select_mode)
         self.btn_build.clicked.connect(self.on_build_clicked)
         self.btn_run.clicked.connect(self.on_run_clicked)
     
     def switch_tab(self, index: int):
-        """Переключение между вкладками"""
         self.content_stack.setCurrentIndex(index)
         self.current_tab_index = index
         
-        # Обновляем стили кнопок вкладок
         tab_style_normal = """
             QPushButton {
                 background-color: transparent;
@@ -429,43 +385,39 @@ class MainWindow(QMainWindow):
         self.log(f"Switched to {tab_names[index]} tab")
     
     def toggle_maximized(self):
-        """Развернуть/восстановить окно"""
         if self.isMaximized():
             self.showNormal()
         else:
             self.showMaximized()
     
     def log(self, message: str):
-        """Вывод сообщения в консоль"""
         timestamp = QDateTime.currentDateTime().toString("hh:mm:ss")
         self.console_text.append(f"[{timestamp}] {message}")
         scrollbar = self.console_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
     
-    def on_selector_captured(self, url: str, xpath: str, text: str, tag: str):
-        """Обрабатывает полученные из JavaScript данные"""
+    def on_selector_captured(self, url: str, xpath: str, text: str, tag: str, alt: str = ""):
         self.log("=" * 50)
         self.log("🎯 НОВЫЙ ЭЛЕМЕНТ ВЫДЕЛЕН:")
         self.log(f"   🌐 URL: {url}")
         self.log(f"   📍 XPath: {xpath}")
         self.log(f"   📝 Text: {text[:50] if text else '(empty)'}")
         self.log(f"   🏷️  Tag: {tag}")
+        if alt:
+            self.log(f"   🖼️  Alt: {alt}")
         
-        # ДОБАВЛЯЕМ В VM ТАБЛИЦУ
         if hasattr(self, 'vm_table'):
-            var_name = f"{tag.lower()}_{self.vm_table.table.rowCount()}"
-            self.vm_table.add_variable(
-                name=var_name,
-                xpath=xpath,
-                var_type="Static",
+            self.vm_table.import_from_select(
                 url=url,
-                sample=text[:50] if text else ""
+                xpath=xpath,
+                text=text,
+                tag=tag,
+                alt=alt
             )
-            self.log(f"✅ Переменная '{var_name}' добавлена в VM таблицу")
+            self.log(f"✅ Переменная добавлена в VM таблицу")
         self.log("=" * 50)
     
     def toggle_select_mode(self):
-        """Включение/выключение режима Select (выделение элементов)"""
         if self.btn_select.isChecked():
             self.log("Select mode: ON — кликните на элемент для сохранения XPath и URL")
             self.enable_select_mode()
@@ -474,7 +426,6 @@ class MainWindow(QMainWindow):
             self.disable_select_mode()
     
     def enable_select_mode(self):
-        """Внедряем JavaScript для захвата кликов по элементам"""
         js = """
         (function() {
             if (window.upb_select_active) return;
@@ -503,25 +454,27 @@ class MainWindow(QMainWindow):
             window.upb_click_handler = function(e) {
                 if (!window.upb_select_active) return;
                 
-                // Блокируем переход по ссылке
                 e.stopPropagation();
                 e.preventDefault();
                 
-                // Получаем данные
                 var xpath = getXPath(e.target);
                 var text = e.target.innerText.substring(0, 100);
                 var tag = e.target.tagName;
                 var url = window.location.href;
                 
-                // Отправляем в Python через console.log (будет перехвачено CustomWebEnginePage)
+                var alt = "";
+                if (tag.toUpperCase() === "IMG") {
+                    alt = e.target.getAttribute("alt") || "";
+                }
+                
                 console.log('[UPB_SELECT]' + JSON.stringify({
                     url: url,
                     xpath: xpath,
                     text: text,
-                    tag: tag
+                    tag: tag,
+                    alt: alt
                 }));
                 
-                // Визуальная обратная связь
                 var originalBg = e.target.style.backgroundColor;
                 e.target.style.backgroundColor = '#ff4444';
                 setTimeout(function() {
@@ -537,7 +490,6 @@ class MainWindow(QMainWindow):
         self.browser_widget.web_view.page().runJavaScript(js)
     
     def disable_select_mode(self):
-        """Отключаем режим Select"""
         js = """
         (function() {
             window.upb_select_active = false;
@@ -550,33 +502,27 @@ class MainWindow(QMainWindow):
         self.browser_widget.web_view.page().runJavaScript(js)
     
     def on_build_clicked(self):
-        """Обработчик кнопки Build"""
         self.log("Build started... (placeholder)")
         self.log("Build completed! Parser generated.")
     
     def on_run_clicked(self):
-        """Обработчик кнопки Run"""
         self.log("Running parser... (placeholder)")
         self.log("Parser execution completed.")
     
     def mousePressEvent(self, event):
-        """Для перемещения окна за верхний бар"""
         if event.button() == Qt.MouseButton.LeftButton:
             if event.pos().y() <= 40:
                 self.drag_pos = event.globalPosition().toPoint()
     
     def mouseMoveEvent(self, event):
-        """Для перемещения окна за верхний бар"""
         if event.buttons() == Qt.MouseButton.LeftButton and self.drag_pos:
             self.move(self.pos() + event.globalPosition().toPoint() - self.drag_pos)
             self.drag_pos = event.globalPosition().toPoint()
     
     def mouseReleaseEvent(self, event):
-        """Для перемещения окна за верхний бар"""
         self.drag_pos = None
     
     def keyPressEvent(self, event: QKeyEvent):
-        """Глобальные хоткеи"""
         if (event.modifiers() & Qt.KeyboardModifier.ControlModifier and 
             event.modifiers() & Qt.KeyboardModifier.ShiftModifier and 
             event.key() == Qt.Key.Key_C):
