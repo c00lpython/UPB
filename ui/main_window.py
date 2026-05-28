@@ -3,14 +3,47 @@ from PyQt6.QtWidgets import (
     QSplitter, QFrame, QLabel, QPushButton, QTextEdit,
     QStackedWidget
 )
-from PyQt6.QtCore import Qt, QDateTime
+from PyQt6.QtCore import Qt, QDateTime, QObject, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtWebEngineCore import QWebEnginePage
 
 from ui.browser_widget import BrowserWidget
 from ui.devtools_panel import DevToolsPanel
 from ui.vm_table import VmTable
 
 import os
+import json
+
+
+class CustomWebEnginePage(QWebEnginePage):
+    """Кастомная страница для перехвата console.log"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.main_window = parent
+    
+    def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+        """Перехватывает сообщения из console.log"""
+        # Проверяем, не наше ли это сообщение
+        if message.startswith('[UPB_SELECT]'):
+            try:
+                # Извлекаем JSON после префикса
+                json_str = message.replace('[UPB_SELECT]', '')
+                data = json.loads(json_str)
+                
+                # Отправляем в главное окно
+                if self.main_window:
+                    self.main_window.on_selector_captured(
+                        url=data.get('url', ''),
+                        xpath=data.get('xpath', ''),
+                        text=data.get('text', ''),
+                        tag=data.get('tag', '')
+                    )
+            except json.JSONDecodeError as e:
+                print(f"JSON parse error: {e}")
+        else:
+            # Обычные сообщения консоли
+            super().javaScriptConsoleMessage(level, message, lineNumber, sourceID)
 
 
 class MainWindow(QMainWindow):
@@ -19,10 +52,13 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("UPB - Universal Parser Builder")
         self.setGeometry(100, 100, 1400, 900)
         
-        # Убираем системные кнопки окна (используем свои)
+        # Убираем системные кнопки окна
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         
-        # Включаем Remote Debugging для DevTools
+        # Для перемещения окна
+        self.drag_pos = None
+        
+        # Включаем Remote Debugging
         os.environ['QTWEBENGINE_REMOTE_DEBUGGING'] = '9222'
         
         # Общий стиль окна
@@ -56,7 +92,7 @@ class MainWindow(QMainWindow):
         
         main_layout.addWidget(self.content_stack, 1)
         
-        # ========== НИЖНЯЯ ПАНЕЛЬ (консоль + tools) ==========
+        # ========== НИЖНЯЯ ПАНЕЛЬ ==========
         self.create_bottom_panel()
         main_layout.addWidget(self.bottom_frame)
         
@@ -185,25 +221,23 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Браузер (левая часть 85%)
         self.browser_widget = BrowserWidget()
         
-        # DevTools панель (правая часть 15%)
-        self.devtools_panel = DevToolsPanel()
+        # Заменяем стандартную страницу на кастомную для перехвата console.log
+        custom_page = CustomWebEnginePage(self)
+        self.browser_widget.web_view.setPage(custom_page)
         
-        # Связываем DevTools с браузером
+        self.devtools_panel = DevToolsPanel()
         self.devtools_panel.attach_to_browser(self.browser_widget)
         
-        # Создаём сплиттер
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.browser_widget)
         splitter.addWidget(self.devtools_panel)
-        splitter.setSizes([850, 150])  # 85% / 15% от 1000
+        splitter.setSizes([850, 150])
         splitter.setHandleWidth(2)
         splitter.setStyleSheet("QSplitter::handle { background-color: #787878; }")
         
         layout.addWidget(splitter)
-        
         return panel
     
     def create_project_panel(self):
@@ -405,14 +439,35 @@ class MainWindow(QMainWindow):
         """Вывод сообщения в консоль"""
         timestamp = QDateTime.currentDateTime().toString("hh:mm:ss")
         self.console_text.append(f"[{timestamp}] {message}")
-        # Автоскролл вниз
         scrollbar = self.console_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+    
+    def on_selector_captured(self, url: str, xpath: str, text: str, tag: str):
+        """Обрабатывает полученные из JavaScript данные"""
+        self.log("=" * 50)
+        self.log("🎯 НОВЫЙ ЭЛЕМЕНТ ВЫДЕЛЕН:")
+        self.log(f"   🌐 URL: {url}")
+        self.log(f"   📍 XPath: {xpath}")
+        self.log(f"   📝 Text: {text[:50] if text else '(empty)'}")
+        self.log(f"   🏷️  Tag: {tag}")
+        
+        # ДОБАВЛЯЕМ В VM ТАБЛИЦУ
+        if hasattr(self, 'vm_table'):
+            var_name = f"{tag.lower()}_{self.vm_table.table.rowCount()}"
+            self.vm_table.add_variable(
+                name=var_name,
+                xpath=xpath,
+                var_type="Static",
+                url=url,
+                sample=text[:50] if text else ""
+            )
+            self.log(f"✅ Переменная '{var_name}' добавлена в VM таблицу")
+        self.log("=" * 50)
     
     def toggle_select_mode(self):
         """Включение/выключение режима Select (выделение элементов)"""
         if self.btn_select.isChecked():
-            self.log("Select mode: ON — click any element to save its XPath")
+            self.log("Select mode: ON — кликните на элемент для сохранения XPath и URL")
             self.enable_select_mode()
         else:
             self.log("Select mode: OFF")
@@ -447,21 +502,33 @@ class MainWindow(QMainWindow):
             
             window.upb_click_handler = function(e) {
                 if (!window.upb_select_active) return;
+                
+                // Блокируем переход по ссылке
                 e.stopPropagation();
                 e.preventDefault();
                 
+                // Получаем данные
                 var xpath = getXPath(e.target);
                 var text = e.target.innerText.substring(0, 100);
                 var tag = e.target.tagName;
+                var url = window.location.href;
                 
-                console.log('[UPB] Selected: ' + tag + ' | ' + xpath);
+                // Отправляем в Python через console.log (будет перехвачено CustomWebEnginePage)
+                console.log('[UPB_SELECT]' + JSON.stringify({
+                    url: url,
+                    xpath: xpath,
+                    text: text,
+                    tag: tag
+                }));
                 
-                // Временная подсветка
+                // Визуальная обратная связь
                 var originalBg = e.target.style.backgroundColor;
                 e.target.style.backgroundColor = '#ff4444';
                 setTimeout(function() {
                     e.target.style.backgroundColor = originalBg;
                 }, 300);
+                
+                return false;
             };
             
             document.addEventListener('click', window.upb_click_handler, true);
@@ -485,18 +552,31 @@ class MainWindow(QMainWindow):
     def on_build_clicked(self):
         """Обработчик кнопки Build"""
         self.log("Build started... (placeholder)")
-        # TODO: Сборка парсера из VM данных
         self.log("Build completed! Parser generated.")
     
     def on_run_clicked(self):
         """Обработчик кнопки Run"""
         self.log("Running parser... (placeholder)")
-        # TODO: Запуск сгенерированного парсера
         self.log("Parser execution completed.")
+    
+    def mousePressEvent(self, event):
+        """Для перемещения окна за верхний бар"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            if event.pos().y() <= 40:
+                self.drag_pos = event.globalPosition().toPoint()
+    
+    def mouseMoveEvent(self, event):
+        """Для перемещения окна за верхний бар"""
+        if event.buttons() == Qt.MouseButton.LeftButton and self.drag_pos:
+            self.move(self.pos() + event.globalPosition().toPoint() - self.drag_pos)
+            self.drag_pos = event.globalPosition().toPoint()
+    
+    def mouseReleaseEvent(self, event):
+        """Для перемещения окна за верхний бар"""
+        self.drag_pos = None
     
     def keyPressEvent(self, event: QKeyEvent):
         """Глобальные хоткеи"""
-        # Ctrl+Shift+C для включения Select режима
         if (event.modifiers() & Qt.KeyboardModifier.ControlModifier and 
             event.modifiers() & Qt.KeyboardModifier.ShiftModifier and 
             event.key() == Qt.Key.Key_C):
