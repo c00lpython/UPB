@@ -1,0 +1,43 @@
+# Виртуальное окружение
+.venv/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.temp
+
+# Проекты пользователей (сгенерированные парсеры и конфиги)
+projects/*/built/
+projects/*/*.conf
+projects/*/*.vars.json
+
+# Настройки IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Файлы сборки
+dist/
+build/
+*.egg-info/
+*.egg
+
+# OS метаданные
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# UPB временные файлы
+*.upb.tmp
