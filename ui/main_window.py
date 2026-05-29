@@ -8,7 +8,6 @@ from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWebEngineCore import QWebEnginePage
 
 from ui.browser_widget import BrowserWidget
-from ui.devtools_panel import DevToolsPanel
 from ui.vm_table import VmTable
 
 import os
@@ -196,7 +195,7 @@ class MainWindow(QMainWindow):
         self.current_tab_index = 0
     
     def create_browser_view(self):
-        """Вкладка Browser: браузер с множеством вкладок + отображение DevTools"""
+        """Вкладка Browser: браузер с множеством вкладок + DevTools в правой панели"""
         panel = QWidget()
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -207,15 +206,14 @@ class MainWindow(QMainWindow):
         
         # Подключаем сигналы
         self.browser_widget.url_changed.connect(self.on_browser_url_changed)
-        self.browser_widget.devtools_changed.connect(self.on_devtools_changed)  # НОВЫЙ СИГНАЛ
+        self.browser_widget.devtools_changed.connect(self.on_devtools_changed)
         
-        # Контейнер для отображения активного DevTools
+        # Контейнер для DevTools от активной вкладки (правая панель)
         self.devtools_container = QWidget()
         self.devtools_container.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #787878;")
         self.devtools_container_layout = QVBoxLayout(self.devtools_container)
         self.devtools_container_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Текущий отображаемый DevTools
         self.current_devtools_view = None
         
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -228,6 +226,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(splitter)
         return panel
 
+    def on_browser_url_changed(self, url: str):
+        """При смене URL в браузере"""
+        self.log(f"📍 URL changed: {url}")
+
     def on_devtools_changed(self, devtools_view):
         """При смене вкладки заменяем DevTools в правой панели"""
         # Удаляем старый DevTools из контейнера
@@ -239,11 +241,6 @@ class MainWindow(QMainWindow):
         self.current_devtools_view = devtools_view
         self.devtools_container_layout.addWidget(self.current_devtools_view)
         self.log(f"🔄 DevTools switched to new tab")
-
-
-    def on_browser_url_changed(self, url: str):
-        """При смене URL в браузере"""
-        self.log(f"📍 URL changed: {url}")
 
     def create_project_panel(self):
         widget = QWidget()
@@ -516,7 +513,6 @@ class MainWindow(QMainWindow):
             document.addEventListener('click', window.upb_click_handler, true);
         })();
         """
-        # Получаем текущую вкладку и применяем JS
         current_web_view = self.browser_widget.get_current_web_view()
         if current_web_view:
             current_web_view.page().runJavaScript(js)
