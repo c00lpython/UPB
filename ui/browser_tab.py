@@ -1,11 +1,39 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineSettings
-from PyQt6.QtCore import QUrl, QTimer
+from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
+from PyQt6.QtCore import QUrl, QTimer, pyqtSignal
+
+
+class CustomWebEnginePage(QWebEnginePage):
+    """Кастомная страница для перехвата console.log"""
+    
+    selector_captured = pyqtSignal(str, str, str, str, str)  # url, xpath, text, tag, alt
+    
+    def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+        """Перехватывает сообщения из console.log"""
+        if message.startswith('[UPB_SELECT]'):
+            try:
+                import json
+                json_str = message.replace('[UPB_SELECT]', '')
+                data = json.loads(json_str)
+                
+                self.selector_captured.emit(
+                    data.get('url', ''),
+                    data.get('xpath', ''),
+                    data.get('text', ''),
+                    data.get('tag', ''),
+                    data.get('alt', '')
+                )
+            except json.JSONDecodeError as e:
+                print(f"JSON parse error: {e}")
+        else:
+            super().javaScriptConsoleMessage(level, message, lineNumber, sourceID)
 
 
 class BrowserTab(QWidget):
     """Отдельная вкладка браузера (только сайт, DevTools отдельно)"""
+    
+    selector_captured = pyqtSignal(str, str, str, str, str)  # url, xpath, text, tag, alt
     
     def __init__(self, profile, tab_id: int, url: str = "https://google.com", parent=None):
         super().__init__(parent)
@@ -56,7 +84,12 @@ class BrowserTab(QWidget):
         # Только сайт (без DevTools внутри вкладки)
         self.site_view = QWebEngineView()
         
-        # Создаём DevTools, но пока не связываем
+        # Устанавливаем кастомную страницу для перехвата console.log
+        self.custom_page = CustomWebEnginePage(self)
+        self.custom_page.selector_captured.connect(self.on_selector_captured)
+        self.site_view.setPage(self.custom_page)
+        
+        # Создаём отдельный DevTools для этой вкладки
         self.devtools_view = QWebEngineView()
         self.devtools_view.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #787878;")
         
@@ -80,26 +113,26 @@ class BrowserTab(QWidget):
         else:
             self.set_url("https://google.com")
         
-        # ВАЖНО: откладываем связывание DevTools до полной загрузки страницы
-        # Это решает проблему чёрного экрана на первой вкладке!
+        # Откладываем связывание DevTools
         self.site_view.loadFinished.connect(self._on_load_finished)
+    
+    def on_selector_captured(self, url: str, xpath: str, text: str, tag: str, alt: str):
+        """Перенаправляет сигнал из CustomWebEnginePage в BrowserTab"""
+        self.selector_captured.emit(url, xpath, text, tag, alt)
     
     def _on_load_finished(self, ok):
         """Когда страница полностью загружена - связываем DevTools"""
         if ok:
-            # Небольшая задержка для уверенности
             QTimer.singleShot(500, self._connect_devtools)
     
     def _connect_devtools(self):
-        """Связываем сайт с его DevTools (вызывается после загрузки страницы)"""
+        """Связываем сайт с его DevTools"""
         if self.devtools_view:
             try:
-                # Пробуем setDevToolsPage
                 self.site_view.page().setDevToolsPage(self.devtools_view.page())
                 print(f"✅ DevTools connected for tab {self.tab_id} (setDevToolsPage)")
             except AttributeError:
                 try:
-                    # Альтернативный метод
                     self.site_view.page().setInspectedPage(self.devtools_view.page())
                     print(f"✅ DevTools connected for tab {self.tab_id} (setInspectedPage)")
                 except AttributeError as e:
