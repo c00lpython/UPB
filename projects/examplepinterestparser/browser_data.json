@@ -1,0 +1,16 @@
+{
+    "tabs": [
+        {
+            "url": "https://www.roblox.com/home",
+            "title": "Home - Roblox",
+            "tab_id": 4
+        },
+        {
+            "url": "https://ru.pinterest.com/",
+            "title": "Pinterest – Пинтерест",
+            "tab_id": 5
+        }
+    ],
+    "current_tab": 0,
+    "history": []
+}
