@@ -1,23 +1,24 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QUrl, QTimer
 
 
 class BrowserTab(QWidget):
-    """Отдельная вкладка браузера с собственным DevTools"""
+    """Отдельная вкладка браузера (только сайт, DevTools отдельно)"""
     
     def __init__(self, profile, tab_id: int, url: str = "https://google.com", parent=None):
         super().__init__(parent)
         
         self.profile = profile
         self.tab_id = tab_id
+        self.devtools_view = None
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # ========== ПАНЕЛЬ НАВИГАЦИИ ==========
+        # Панель навигации
         nav_layout = QHBoxLayout()
         nav_layout.setSpacing(5)
         
@@ -52,43 +53,18 @@ class BrowserTab(QWidget):
         nav_layout.addWidget(self.refresh_btn)
         nav_layout.addWidget(self.url_bar)
         
-        # ========== ОСНОВНОЙ БРАУЗЕР ==========
+        # Только сайт (без DevTools внутри вкладки)
         self.site_view = QWebEngineView()
         
-        # Убираем проблемную строку DeveloperExtrasEnabled
-        # Remote debugging уже включён в main.py
-        
-        # Загружаем URL
-        if isinstance(url, str) and url:
-            self.set_url(url)
-        else:
-            self.set_url("https://google.com")
-        
-        # ========== СОБСТВЕННЫЙ DEVTOOLS ДЛЯ ЭТОЙ ВКЛАДКИ ==========
+        # Создаём DevTools, но пока не связываем
         self.devtools_view = QWebEngineView()
         self.devtools_view.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #787878;")
         
-        # КЛЮЧЕВОЙ МОМЕНТ: связываем браузер с его личным DevTools
-        try:
-            self.site_view.page().setDevToolsPage(self.devtools_view.page())
-            print(f"✅ DevTools connected for tab {tab_id}")
-        except AttributeError:
-            try:
-                self.site_view.page().setInspectedPage(self.devtools_view.page())
-                print(f"✅ DevTools connected via setInspectedPage for tab {tab_id}")
-            except AttributeError as e:
-                print(f"⚠️ Could not connect DevTools for tab {tab_id}: {e}")
-        
-        # ========== РАЗМЕЩАЕМ ВСЁ В СПЛИТТЕРЕ ==========
-        # Браузер и DevTools рядом в одной вкладке
-        splitter = QHBoxLayout()
-        splitter.addWidget(self.site_view, stretch=85)   # 85% - браузер
-        splitter.addWidget(self.devtools_view, stretch=15)  # 15% - DevTools
-        
+        # Добавляем только сайт в вкладку
         layout.addLayout(nav_layout)
-        layout.addLayout(splitter)
+        layout.addWidget(self.site_view)
         
-        # Сигналы для навигации
+        # Сигналы
         self.back_btn.clicked.connect(self.site_view.back)
         self.forward_btn.clicked.connect(self.site_view.forward)
         self.refresh_btn.clicked.connect(self.site_view.reload)
@@ -97,6 +73,37 @@ class BrowserTab(QWidget):
         self.site_view.titleChanged.connect(self.update_title)
         
         self.current_title = "New Tab"
+        
+        # Загружаем URL
+        if isinstance(url, str) and url:
+            self.set_url(url)
+        else:
+            self.set_url("https://google.com")
+        
+        # ВАЖНО: откладываем связывание DevTools до полной загрузки страницы
+        # Это решает проблему чёрного экрана на первой вкладке!
+        self.site_view.loadFinished.connect(self._on_load_finished)
+    
+    def _on_load_finished(self, ok):
+        """Когда страница полностью загружена - связываем DevTools"""
+        if ok:
+            # Небольшая задержка для уверенности
+            QTimer.singleShot(500, self._connect_devtools)
+    
+    def _connect_devtools(self):
+        """Связываем сайт с его DevTools (вызывается после загрузки страницы)"""
+        if self.devtools_view:
+            try:
+                # Пробуем setDevToolsPage
+                self.site_view.page().setDevToolsPage(self.devtools_view.page())
+                print(f"✅ DevTools connected for tab {self.tab_id} (setDevToolsPage)")
+            except AttributeError:
+                try:
+                    # Альтернативный метод
+                    self.site_view.page().setInspectedPage(self.devtools_view.page())
+                    print(f"✅ DevTools connected for tab {self.tab_id} (setInspectedPage)")
+                except AttributeError as e:
+                    print(f"⚠️ Could not connect DevTools for tab {self.tab_id}: {e}")
     
     def set_url(self, url: str):
         if not url.startswith("http"):
@@ -123,7 +130,6 @@ class BrowserTab(QWidget):
         return self.devtools_view
     
     def get_tab_data(self):
-        """Возвращает данные вкладки для сохранения"""
         return {
             "url": self.get_current_url(),
             "title": self.current_title,
