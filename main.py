@@ -1,30 +1,27 @@
 import sys
-import os
+import threading
+import time
 from PyQt6.QtWidgets import QApplication
-
-os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "9222"
-
 from ui.main_window import MainWindow
-
+from core.n8n_server import N8nServer
 
 def main():
     app = QApplication(sys.argv)
     
-    # НЕТ ГЛОБАЛЬНОГО ПРОФИЛЯ! Передаём None.
-    # Профиль будет создаваться при создании/открытии проекта
-    window = MainWindow(profile=None)
+    # Запускаем n8n сервер в отдельном потоке
+    n8n_server = N8nServer()
+    n8n_server.start()
+    
+    # Ждём запуска сервера
+    for _ in range(30):
+        time.sleep(1)
+        if n8n_server.is_running:
+            break
+    
+    window = MainWindow(n8n_server=n8n_server)
     window.show()
     
-    print("\n" + "="*60)
-    print("🔧 REMOTE DEBUGGING ACTIVE")
-    print("="*60)
-    print("1. Откройте Google Chrome или Edge")
-    print("2. Перейдите по адресу: http://localhost:9222")
-    print("3. Нажмите 'inspect' под вашей страницей")
-    print("="*60 + "\n")
-    
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()

@@ -22,7 +22,7 @@ projects/*/*.conf
 projects/*/*.vars.json
 projects/*/profile/     # <--- ПРОФИЛИ ПРОЕКТОВ (куки, сессии)
 projects/*/parser/
-
+projects
 # Временные профили браузера
 temp_profile_*/
 temp_profile_*
