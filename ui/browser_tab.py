@@ -2,15 +2,20 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushB
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
 from PyQt6.QtCore import QUrl, QTimer, pyqtSignal
+import os
 
 
 class CustomWebEnginePage(QWebEnginePage):
     """Кастомная страница для перехвата console.log"""
     
-    selector_captured = pyqtSignal(str, str, str, str, str)  # url, xpath, text, tag, alt
+    selector_captured = pyqtSignal(str, str, str, str, str)
+    
+    def __init__(self, profile, parent=None):
+        # Создаём страницу с профилем
+        super().__init__(profile, parent)
+        self.profile = profile
     
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
-        """Перехватывает сообщения из console.log"""
         if message.startswith('[UPB_SELECT]'):
             try:
                 import json
@@ -31,9 +36,9 @@ class CustomWebEnginePage(QWebEnginePage):
 
 
 class BrowserTab(QWidget):
-    """Отдельная вкладка браузера (только сайт, DevTools отдельно)"""
+    """Отдельная вкладка браузера"""
     
-    selector_captured = pyqtSignal(str, str, str, str, str)  # url, xpath, text, tag, alt
+    selector_captured = pyqtSignal(str, str, str, str, str)
     
     def __init__(self, profile, tab_id: int, url: str = "https://google.com", parent=None):
         super().__init__(parent)
@@ -41,6 +46,35 @@ class BrowserTab(QWidget):
         self.profile = profile
         self.tab_id = tab_id
         self.devtools_view = None
+        
+        # ========== ЛОГИРОВАНИЕ ПРОФИЛЯ ==========
+        print(f"\n{'─'*60}")
+        print(f"🔍 [TAB {tab_id}] ИНИЦИАЛИЗАЦИЯ ВКЛАДКИ")
+        print(f"{'─'*60}")
+        
+        if profile:
+            try:
+                storage_path = profile.persistentStoragePath()
+                cookies_policy = profile.persistentCookiesPolicy()
+                is_off_record = profile.isOffTheRecord()
+                
+                print(f"   ✅ ПРОФИЛЬ: {profile}")
+                print(f"   📁 Путь хранения: {storage_path}")
+                print(f"   🍪 Политика кук: {cookies_policy}")
+                print(f"   🕶️  Режим инкогнито: {is_off_record}")
+                
+                if "temp_profile" in storage_path:
+                    print(f"   ⚠️  ТИП: ВРЕМЕННЫЙ ПРОФИЛЬ (будет удалён)")
+                elif "projects" in storage_path:
+                    print(f"   📦 ТИП: ПРОФИЛЬ ПРОЕКТА")
+                else:
+                    print(f"   ❓ ТИП: НЕИЗВЕСТНЫЙ")
+            except Exception as e:
+                print(f"   ❌ Ошибка получения информации о профиле: {e}")
+        else:
+            print(f"   ❌ ПРОФИЛЬ ОТСУТСТВУЕТ!")
+        
+        print(f"{'─'*60}\n")
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -81,19 +115,16 @@ class BrowserTab(QWidget):
         nav_layout.addWidget(self.refresh_btn)
         nav_layout.addWidget(self.url_bar)
         
-        # Только сайт (без DevTools внутри вкладки)
+        # Сайт с кастомной страницей (передаём профиль в конструктор)
         self.site_view = QWebEngineView()
-        
-        # Устанавливаем кастомную страницу для перехвата console.log
-        self.custom_page = CustomWebEnginePage(self)
+        self.custom_page = CustomWebEnginePage(profile, self)
         self.custom_page.selector_captured.connect(self.on_selector_captured)
         self.site_view.setPage(self.custom_page)
         
-        # Создаём отдельный DevTools для этой вкладки
+        # DevTools
         self.devtools_view = QWebEngineView()
         self.devtools_view.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #787878;")
         
-        # Добавляем только сайт в вкладку
         layout.addLayout(nav_layout)
         layout.addWidget(self.site_view)
         
@@ -117,16 +148,13 @@ class BrowserTab(QWidget):
         self.site_view.loadFinished.connect(self._on_load_finished)
     
     def on_selector_captured(self, url: str, xpath: str, text: str, tag: str, alt: str):
-        """Перенаправляет сигнал из CustomWebEnginePage в BrowserTab"""
         self.selector_captured.emit(url, xpath, text, tag, alt)
     
     def _on_load_finished(self, ok):
-        """Когда страница полностью загружена - связываем DevTools"""
         if ok:
             QTimer.singleShot(500, self._connect_devtools)
     
     def _connect_devtools(self):
-        """Связываем сайт с его DevTools"""
         if self.devtools_view:
             try:
                 self.site_view.page().setDevToolsPage(self.devtools_view.page())
