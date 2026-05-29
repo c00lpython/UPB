@@ -1,0 +1,47 @@
+# Создаём .gitignore (замени существующий)
+@"
+# Виртуальное окружение
+.venv/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Логи
+*.log
+parser.log
+
+# Выходные данные парсера
+output.*
+*.xlsx
+*.json
+*.csv
+
+# Конфиденциальные данные (секреты, токены)
+config.local.conf
+*.local.conf
+secrets.json
+*.key
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS метаданные
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Временные файлы
+*.tmp
+*.temp
+"@ | Out-File -FilePath .gitignore -Encoding utf8
