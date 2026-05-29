@@ -12,7 +12,7 @@ from core.project_manager import ProjectManager
 
 import os
 import json
-
+import uuid
 
 
 class MainWindow(QMainWindow):
@@ -24,10 +24,7 @@ class MainWindow(QMainWindow):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.drag_pos = None
         
-        # Сохраняем профиль
         self.profile = profile
-        
-        # Инициализируем ProjectManager
         self.project_manager = ProjectManager()
         
         os.environ['QTWEBENGINE_REMOTE_DEBUGGING'] = '9222'
@@ -170,24 +167,35 @@ class MainWindow(QMainWindow):
         """)
         self.current_tab_index = 0
     
-    
-
     def create_browser_view(self):
-        """Вкладка Browser: браузер с множеством вкладок + DevTools в правой панели"""
         panel = QWidget()
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Браузер с множеством вкладок
-        self.browser_widget = BrowserWidget(self.profile)
+        from PyQt6.QtWebEngineCore import QWebEngineProfile
         
-        # Подключаем сигналы
+        temp_id = str(uuid.uuid4())[:8]
+        temp_profile = QWebEngineProfile(f"Temporary_{temp_id}")
+        temp_profile.setPersistentStoragePath(f"temp_profile_{temp_id}")
+        temp_profile.setPersistentCookiesPolicy(
+            QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies
+        )
+        
+        print(f"\n{'='*70}")
+        print(f"🔧 [MAIN] СОЗДАНИЕ ВРЕМЕННОГО БРАУЗЕРА")
+        print(f"{'='*70}")
+        print(f"   📁 Путь хранения: {temp_profile.persistentStoragePath()}")
+        print(f"   🍪 Политика кук: NoPersistentCookies")
+        print(f"   🆔 ID: {temp_id}")
+        print(f"{'='*70}\n")
+        
+        self.browser_widget = BrowserWidget(temp_profile)
+        
         self.browser_widget.url_changed.connect(self.on_browser_url_changed)
         self.browser_widget.devtools_changed.connect(self.on_devtools_changed)
-        self.browser_widget.selector_captured.connect(self.on_selector_captured)  # НОВЫЙ СИГНАЛ!
+        self.browser_widget.selector_captured.connect(self.on_selector_captured)
         
-        # Контейнер для DevTools от активной вкладки
         self.devtools_container = QWidget()
         self.devtools_container.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #787878;")
         self.devtools_container_layout = QVBoxLayout(self.devtools_container)
@@ -205,41 +213,33 @@ class MainWindow(QMainWindow):
         layout.addWidget(splitter)
         return panel
 
-
     def on_browser_url_changed(self, url: str):
-        """При смене URL в браузере"""
         self.log(f"📍 URL changed: {url}")
 
     def on_devtools_changed(self, devtools_view):
-        """При смене вкладки заменяем DevTools в правой панели"""
         if self.current_devtools_view:
             self.devtools_container_layout.removeWidget(self.current_devtools_view)
             self.current_devtools_view.setParent(None)
         
         self.current_devtools_view = devtools_view
         self.devtools_container_layout.addWidget(self.current_devtools_view)
-        self.log(f"🔄 DevTools switched to new tab")
 
     def create_project_panel(self):
-        """Вкладка Project — управление проектами с реальной функциональностью"""
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(15)
         
-        # ========== ЛЕВАЯ ПАНЕЛЬ - СПИСОК ПРОЕКТОВ ==========
         left_panel = QWidget()
         left_panel.setMaximumWidth(300)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(10)
         
-        # Заголовок
         projects_label = QLabel("📁 PROJECTS")
         projects_label.setStyleSheet("color: #0e639c; font-weight: bold; font-size: 12px; padding: 5px;")
         left_layout.addWidget(projects_label)
         
-        # Список проектов
         self.project_list = QListWidget()
         self.project_list.setStyleSheet("""
             QListWidget {
@@ -262,12 +262,9 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        # Загружаем проекты из ProjectManager
         self.refresh_project_list()
-        
         left_layout.addWidget(self.project_list)
         
-        # Кнопка создания нового проекта
         self.btn_new_project = QPushButton("➕ New Project")
         self.btn_new_project.setStyleSheet("""
             QPushButton {
@@ -284,13 +281,11 @@ class MainWindow(QMainWindow):
         """)
         left_layout.addWidget(self.btn_new_project)
         
-        # ========== ПРАВАЯ ПАНЕЛЬ - ДЕТАЛИ ПРОЕКТА ==========
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(10)
         
-        # Группа с информацией о проекте
         info_group = QGroupBox("📄 Project Details")
         info_group.setStyleSheet("""
             QGroupBox {
@@ -342,7 +337,6 @@ class MainWindow(QMainWindow):
         
         right_layout.addWidget(info_group)
         
-        # Группа с превью переменных
         vars_group = QGroupBox("📊 Variables Preview")
         vars_group.setStyleSheet("""
             QGroupBox {
@@ -376,7 +370,6 @@ class MainWindow(QMainWindow):
         
         right_layout.addWidget(vars_group)
         
-        # ========== КНОПКИ ДЕЙСТВИЙ ==========
         actions_layout = QHBoxLayout()
         actions_layout.setSpacing(10)
         
@@ -404,14 +397,11 @@ class MainWindow(QMainWindow):
             actions_layout.addWidget(btn)
         
         actions_layout.addStretch()
-        
         right_layout.addLayout(actions_layout)
         
-        # Собираем вместе
         layout.addWidget(left_panel)
         layout.addWidget(right_panel, 1)
         
-        # Подключаем сигналы
         self.project_list.itemSelectionChanged.connect(self.on_project_selected)
         self.btn_new_project.clicked.connect(self.on_new_project)
         self.btn_save.clicked.connect(self.on_save_project)
@@ -419,14 +409,12 @@ class MainWindow(QMainWindow):
         self.btn_export.clicked.connect(self.on_export_parser)
         self.btn_delete.clicked.connect(self.on_delete_project)
         
-        # Выбираем первый проект по умолчанию
         if self.project_list.count() > 0:
             self.project_list.setCurrentRow(0)
         
         return widget
 
     def refresh_project_list(self):
-        """Обновляет список проектов из ProjectManager"""
         self.project_list.clear()
         projects = self.project_manager.get_all_projects()
         for project in projects:
@@ -435,7 +423,6 @@ class MainWindow(QMainWindow):
             self.project_list.addItem(item)
 
     def on_project_selected(self):
-        """При выборе проекта из списка"""
         current = self.project_list.currentItem()
         if current:
             project_data = current.data(Qt.ItemDataRole.UserRole)
@@ -445,7 +432,6 @@ class MainWindow(QMainWindow):
                 self.project_modified.setText(project_data['modified'][:16] if project_data['modified'] else "—")
                 self.project_vars_count.setText(str(project_data['variables_count']))
                 
-                # Если проект открыт, показываем превью переменных
                 if hasattr(self, 'vm_table') and self.project_manager.current_project == project_data['name']:
                     preview_text = ""
                     for row in range(self.vm_table.table.rowCount()):
@@ -458,15 +444,41 @@ class MainWindow(QMainWindow):
                     self.vars_preview.setText("Open project to see variables")
 
     def on_new_project(self):
-        """Создание нового проекта"""
         name, ok = QInputDialog.getText(self, "New Project", "Enter project name:")
         if ok and name:
+            print(f"\n{'='*70}")
+            print(f"🌟 [NEW PROJECT] Создание проекта: {name}")
+            print(f"{'='*70}")
+            
             success, result = self.project_manager.create_project(name)
             if success:
-                self.log(f"✅ Created new project: {name}")
-                self.refresh_project_list()
+                from PyQt6.QtWebEngineCore import QWebEngineProfile
+                project_path = os.path.join(self.project_manager.projects_dir, name)
+                profile_path = os.path.join(project_path, "profile")
                 
-                # Выбираем новый проект
+                if not os.path.exists(profile_path):
+                    os.makedirs(profile_path)
+                
+                profile = QWebEngineProfile(name)
+                profile.setPersistentStoragePath(profile_path)
+                profile.setPersistentCookiesPolicy(
+                    QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
+                )
+                
+                print(f"   📁 Профиль проекта: {profile_path}")
+                print(f"   🍪 Политика: ForcePersistentCookies")
+                print(f"{'='*70}\n")
+                
+                new_browser = BrowserWidget(profile)
+                new_browser.url_changed.connect(self.on_browser_url_changed)
+                new_browser.devtools_changed.connect(self.on_devtools_changed)
+                new_browser.selector_captured.connect(self.on_selector_captured)
+                
+                self._replace_browser_widget(new_browser)
+                self.refresh_project_list()
+                self.project_manager.current_project = name
+                self.project_manager.current_profile = profile
+                
                 for i in range(self.project_list.count()):
                     item = self.project_list.item(i)
                     if item.text().replace("📂  ", "") == name:
@@ -476,7 +488,6 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Error", f"Failed to create project: {result}")
 
     def on_save_project(self):
-        """Сохранение текущего проекта"""
         current = self.project_list.currentItem()
         if not current:
             self.log("⚠️ No project selected")
@@ -484,12 +495,10 @@ class MainWindow(QMainWindow):
         
         project_name = current.text().replace("📂  ", "")
         
-        # Собираем данные из VM таблицы
         variables = []
         if hasattr(self, 'vm_table'):
             variables = self.vm_table.get_all_variables()
         
-        # Собираем данные из браузера
         tabs_data = []
         current_tab = 0
         if hasattr(self, 'browser_widget'):
@@ -509,8 +518,22 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "Error", f"Failed to save project: {result}")
 
+    def _replace_browser_widget(self, new_browser_widget):
+        browser_tab_index = 0
+        browser_tab_widget = self.content_stack.widget(browser_tab_index)
+        splitter = browser_tab_widget.findChild(QSplitter)
+        
+        if splitter:
+            old_browser = splitter.widget(0)
+            if old_browser and hasattr(old_browser, 'cleanup'):
+                old_browser.cleanup()
+            splitter.insertWidget(0, new_browser_widget)
+            if old_browser:
+                old_browser.deleteLater()
+        
+        self.browser_widget = new_browser_widget
+
     def on_open_project(self):
-        """Открытие выбранного проекта"""
         current = self.project_list.currentItem()
         if not current:
             self.log("⚠️ No project selected")
@@ -518,13 +541,45 @@ class MainWindow(QMainWindow):
         
         project_name = current.text().replace("📂  ", "")
         
-        # Загружаем проект
+        print(f"\n{'='*70}")
+        print(f"📂 [OPEN PROJECT] Загрузка проекта: {project_name}")
+        print(f"{'='*70}")
+        
         project_data, msg = self.project_manager.load_project(project_name)
         
         if project_data:
-            self.log(f"✅ Project loaded: {project_name}")
+            from PyQt6.QtWebEngineCore import QWebEngineProfile
+            project_path = os.path.join(self.project_manager.projects_dir, project_name)
+            profile_path = os.path.join(project_path, "profile")
             
-            # Загружаем переменные в VM таблицу
+            if not os.path.exists(profile_path):
+                os.makedirs(profile_path)
+            
+            profile = QWebEngineProfile(project_name)
+            profile.setPersistentStoragePath(profile_path)
+            profile.setPersistentCookiesPolicy(
+                QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
+            )
+            
+            print(f"   📁 Профиль загружен из: {profile_path}")
+            print(f"   🍪 Политика: ForcePersistentCookies")
+            print(f"{'='*70}\n")
+            
+            new_browser = BrowserWidget(profile)
+            new_browser.url_changed.connect(self.on_browser_url_changed)
+            new_browser.devtools_changed.connect(self.on_devtools_changed)
+            new_browser.selector_captured.connect(self.on_selector_captured)
+            
+            browser_data = project_data.get('browser_data', {})
+            tabs = browser_data.get('tabs', [])
+            if tabs:
+                new_browser.restore_tabs(tabs)
+                self.log(f"   🌐 Restored {len(tabs)} browser tabs")
+            else:
+                new_browser.add_new_tab("https://google.com")
+            
+            self._replace_browser_widget(new_browser)
+            
             if hasattr(self, 'vm_table'):
                 self.vm_table.clear_all()
                 for var in project_data.get('variables', []):
@@ -537,31 +592,23 @@ class MainWindow(QMainWindow):
                     )
                 self.log(f"   📊 Loaded {len(project_data.get('variables', []))} variables")
             
-            # Загружаем состояние браузера
-            if hasattr(self, 'browser_widget'):
-                browser_data = project_data.get('browser_data', {})
-                tabs = browser_data.get('tabs', [])
-                if tabs:
-                    self.browser_widget.restore_tabs(tabs)
-                    self.log(f"   🌐 Restored {len(tabs)} browser tabs")
-            
-            # Обновляем информацию в панели
             self.project_name.setText(project_name)
             self.project_created.setText(project_data['metadata'].get('created', '—')[:16])
             self.project_modified.setText(project_data['metadata'].get('modified', '—')[:16])
             self.project_vars_count.setText(str(len(project_data.get('variables', []))))
             
-            # Обновляем превью
             preview_text = ""
             for var in project_data.get('variables', []):
                 preview_text += f"• {var.get('name', '?')} → {var.get('xpath', '')[:50]}...\n"
             self.vars_preview.setText(preview_text if preview_text else "No variables")
             
+            self.project_manager.current_project = project_name
+            self.project_manager.current_profile = profile
+            
         else:
             QMessageBox.warning(self, "Error", f"Failed to load project: {msg}")
 
     def on_export_parser(self):
-        """Экспорт парсера для выбранного проекта"""
         current = self.project_list.currentItem()
         if not current:
             self.log("⚠️ No project selected")
@@ -569,19 +616,16 @@ class MainWindow(QMainWindow):
         
         project_name = current.text().replace("📂  ", "")
         
-        # Получаем переменные из VM таблицы
         variables = []
         if hasattr(self, 'vm_table'):
             variables = self.vm_table.get_all_variables()
         
-        # Получаем конфиг
         config = {
             "format": "excel",
             "telegram_bot_token": "",
             "telegram_chat_id": ""
         }
         
-        # Генерируем парсер
         parser_file = self.project_manager.generate_parser(project_name, variables, config)
         
         if parser_file:
@@ -591,13 +635,34 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", "Failed to generate parser")
 
     def on_delete_project(self):
-        """Удаление проекта"""
         current = self.project_list.currentItem()
         if not current:
             self.log("⚠️ No project selected")
             return
         
         project_name = current.text().replace("📂  ", "")
+        
+        if self.project_manager.current_project == project_name:
+            if hasattr(self, 'browser_widget') and hasattr(self.browser_widget, 'cleanup'):
+                self.browser_widget.cleanup()
+            
+            from PyQt6.QtWebEngineCore import QWebEngineProfile
+            temp_id = str(uuid.uuid4())[:8]
+            temp_profile = QWebEngineProfile(f"Temporary_{temp_id}")
+            temp_profile.setPersistentStoragePath(f"temp_profile_{temp_id}")
+            temp_profile.setPersistentCookiesPolicy(
+                QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies
+            )
+            
+            new_browser = BrowserWidget(temp_profile)
+            new_browser.url_changed.connect(self.on_browser_url_changed)
+            new_browser.devtools_changed.connect(self.on_devtools_changed)
+            new_browser.selector_captured.connect(self.on_selector_captured)
+            
+            self._replace_browser_widget(new_browser)
+        
+        import time
+        time.sleep(0.5)
         
         reply = QMessageBox.question(
             self, "Delete Project", 
@@ -611,12 +676,14 @@ class MainWindow(QMainWindow):
                 self.log(f"✅ Project deleted: {project_name}")
                 self.refresh_project_list()
                 
-                # Очищаем детали
                 self.project_name.clear()
                 self.project_created.setText("—")
                 self.project_modified.setText("—")
                 self.project_vars_count.setText("0")
                 self.vars_preview.clear()
+                
+                if hasattr(self, 'vm_table'):
+                    self.vm_table.clear_all()
             else:
                 QMessageBox.warning(self, "Error", f"Failed to delete project: {result}")
 

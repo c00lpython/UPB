@@ -1,0 +1,11 @@
+{
+    "tabs": [
+        {
+            "url": "https://www.google.com/",
+            "title": "Google",
+            "tab_id": 1
+        }
+    ],
+    "current_tab": 0,
+    "history": []
+}
