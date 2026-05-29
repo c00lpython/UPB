@@ -20,6 +20,16 @@ __pycache__/
 projects/*/built/
 projects/*/*.conf
 projects/*/*.vars.json
+projects/*/profile/     # <--- ПРОФИЛИ ПРОЕКТОВ (куки, сессии)
+projects/*/parser/
+
+# Временные профили браузера
+temp_profile_*/
+temp_profile_*
+
+# Папка profiles (глобальный профиль — устарело, но на всякий случай)
+profiles/
+profiles_*/
 
 # Настройки IDE
 .vscode/
@@ -41,3 +51,6 @@ desktop.ini
 
 # UPB временные файлы
 *.upb.tmp
+
+# Логи UPB
+upb_*.log
