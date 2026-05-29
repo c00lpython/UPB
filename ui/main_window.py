@@ -44,13 +44,16 @@ class CustomWebEnginePage(QWebEnginePage):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, profile=None):
         super().__init__()
         self.setWindowTitle("UPB - Universal Parser Builder")
         self.setGeometry(100, 100, 1400, 900)
         
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.drag_pos = None
+        
+        # Сохраняем профиль
+        self.profile = profile
         
         os.environ['QTWEBENGINE_REMOTE_DEBUGGING'] = '9222'
         
@@ -193,29 +196,55 @@ class MainWindow(QMainWindow):
         self.current_tab_index = 0
     
     def create_browser_view(self):
+        """Вкладка Browser: браузер с множеством вкладок + отображение DevTools"""
         panel = QWidget()
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        self.browser_widget = BrowserWidget()
+        # Браузер с множеством вкладок
+        self.browser_widget = BrowserWidget(self.profile)
         
-        custom_page = CustomWebEnginePage(self)
-        self.browser_widget.web_view.setPage(custom_page)
+        # Подключаем сигналы
+        self.browser_widget.url_changed.connect(self.on_browser_url_changed)
+        self.browser_widget.devtools_changed.connect(self.on_devtools_changed)  # НОВЫЙ СИГНАЛ
         
-        self.devtools_panel = DevToolsPanel()
-        self.devtools_panel.attach_to_browser(self.browser_widget)
+        # Контейнер для отображения активного DevTools
+        self.devtools_container = QWidget()
+        self.devtools_container.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #787878;")
+        self.devtools_container_layout = QVBoxLayout(self.devtools_container)
+        self.devtools_container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Текущий отображаемый DevTools
+        self.current_devtools_view = None
         
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.browser_widget)
-        splitter.addWidget(self.devtools_panel)
+        splitter.addWidget(self.devtools_container)
         splitter.setSizes([850, 150])
         splitter.setHandleWidth(2)
         splitter.setStyleSheet("QSplitter::handle { background-color: #787878; }")
         
         layout.addWidget(splitter)
         return panel
-    
+
+    def on_devtools_changed(self, devtools_view):
+        """При смене вкладки заменяем DevTools в правой панели"""
+        # Удаляем старый DevTools из контейнера
+        if self.current_devtools_view:
+            self.devtools_container_layout.removeWidget(self.current_devtools_view)
+            self.current_devtools_view.setParent(None)
+        
+        # Добавляем новый DevTools
+        self.current_devtools_view = devtools_view
+        self.devtools_container_layout.addWidget(self.current_devtools_view)
+        self.log(f"🔄 DevTools switched to new tab")
+
+
+    def on_browser_url_changed(self, url: str):
+        """При смене URL в браузере"""
+        self.log(f"📍 URL changed: {url}")
+
     def create_project_panel(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -487,7 +516,10 @@ class MainWindow(QMainWindow):
             document.addEventListener('click', window.upb_click_handler, true);
         })();
         """
-        self.browser_widget.web_view.page().runJavaScript(js)
+        # Получаем текущую вкладку и применяем JS
+        current_web_view = self.browser_widget.get_current_web_view()
+        if current_web_view:
+            current_web_view.page().runJavaScript(js)
     
     def disable_select_mode(self):
         js = """
@@ -499,7 +531,9 @@ class MainWindow(QMainWindow):
             }
         })();
         """
-        self.browser_widget.web_view.page().runJavaScript(js)
+        current_web_view = self.browser_widget.get_current_web_view()
+        if current_web_view:
+            current_web_view.page().runJavaScript(js)
     
     def on_build_clicked(self):
         self.log("Build started... (placeholder)")
