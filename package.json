@@ -1,0 +1,26 @@
+{
+  "name": "upb",
+  "version": "1.0.0",
+  "description": "**No-code конструктор парсеров с собственным браузером и визуальным выделением данных**",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "n8n": "node node_modules/n8n/bin/n8n",
+    "n8n:start": "node ./node_modules/n8n/bin/n8n"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/c00lpython/UPB.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/c00lpython/UPB/issues"
+  },
+  "homepage": "https://github.com/c00lpython/UPB#readme",
+  "dependencies": {
+    "n8n": "^2.22.5"
+  }
+}
