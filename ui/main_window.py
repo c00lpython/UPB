@@ -1,13 +1,15 @@
+# ui/main_window.py
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QFrame, QLabel, QPushButton, QTextEdit,
     QStackedWidget, QListWidget, QListWidgetItem, QLineEdit,
     QTextEdit, QGroupBox, QGridLayout, QMessageBox, QInputDialog
 )
-from PyQt6.QtCore import Qt, QDateTime, QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, QDateTime, QUrl
 from PyQt6.QtGui import QKeyEvent
 from ui.browser_widget import BrowserWidget
 from ui.vm_table import VmTable
+from ui.script_editor import ScriptEditor
 from core.project_manager import ProjectManager
 
 import os
@@ -53,6 +55,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.create_vm_panel())
         self.content_stack.addWidget(self.create_build_panel())
         self.content_stack.addWidget(self.create_test_panel())
+        self.content_stack.addWidget(self.create_script_editor_panel())  # Script Editor
         main_layout.addWidget(self.content_stack, 1)
         
         self.create_bottom_panel()
@@ -87,6 +90,7 @@ class MainWindow(QMainWindow):
         self.tab_vm = QPushButton("VM")
         self.tab_build = QPushButton("Build")
         self.tab_test = QPushButton("Test")
+        self.tab_script = QPushButton("Script Editor")
         
         tab_style = """
             QPushButton {
@@ -101,7 +105,8 @@ class MainWindow(QMainWindow):
             }
         """
         
-        for tab in [self.tab_browser, self.tab_project, self.tab_vm, self.tab_build, self.tab_test]:
+        for tab in [self.tab_browser, self.tab_project, self.tab_vm, 
+                    self.tab_build, self.tab_test, self.tab_script]:
             tab.setStyleSheet(tab_style)
             layout.addWidget(tab)
         
@@ -156,6 +161,7 @@ class MainWindow(QMainWindow):
         self.tab_vm.clicked.connect(lambda: self.switch_tab(2))
         self.tab_build.clicked.connect(lambda: self.switch_tab(3))
         self.tab_test.clicked.connect(lambda: self.switch_tab(4))
+        self.tab_script.clicked.connect(lambda: self.switch_tab(5))
         
         self.tab_browser.setStyleSheet("""
             QPushButton {
@@ -223,6 +229,18 @@ class MainWindow(QMainWindow):
         
         self.current_devtools_view = devtools_view
         self.devtools_container_layout.addWidget(self.current_devtools_view)
+
+    def create_script_editor_panel(self):
+        """Script Editor панель с n8n браузером и кастомными блоками"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.script_editor = ScriptEditor(project_manager=self.project_manager)
+        self.script_editor.log_signal.connect(self.log)
+        
+        layout.addWidget(self.script_editor)
+        return widget
 
     def create_project_panel(self):
         widget = QWidget()
@@ -432,6 +450,10 @@ class MainWindow(QMainWindow):
                 self.project_modified.setText(project_data['modified'][:16] if project_data['modified'] else "—")
                 self.project_vars_count.setText(str(project_data['variables_count']))
                 
+                # Обновляем Script Editor с текущим проектом
+                if hasattr(self, 'script_editor'):
+                    self.script_editor.update_project(project_data['name'])
+                
                 if hasattr(self, 'vm_table') and self.project_manager.current_project == project_data['name']:
                     preview_text = ""
                     for row in range(self.vm_table.table.rowCount()):
@@ -478,6 +500,10 @@ class MainWindow(QMainWindow):
                 self.refresh_project_list()
                 self.project_manager.current_project = name
                 self.project_manager.current_profile = profile
+                
+                # Обновляем Script Editor
+                if hasattr(self, 'script_editor'):
+                    self.script_editor.update_project(name)
                 
                 for i in range(self.project_list.count()):
                     item = self.project_list.item(i)
@@ -605,11 +631,14 @@ class MainWindow(QMainWindow):
             self.project_manager.current_project = project_name
             self.project_manager.current_profile = profile
             
+            # Обновляем Script Editor
+            if hasattr(self, 'script_editor'):
+                self.script_editor.update_project(project_name)
+            
         else:
             QMessageBox.warning(self, "Error", f"Failed to load project: {msg}")
 
     def on_export_parser(self):
-        """Экспорт парсера (генерирует config.conf)"""
         current = self.project_list.currentItem()
         if not current:
             self.log("⚠️ No project selected")
@@ -618,10 +647,8 @@ class MainWindow(QMainWindow):
         
         project_name = current.text().replace("📂  ", "")
         
-        # Сначала сохраняем проект
         self.on_save_project()
         
-        # Генерируем config.conf
         config_path = self.generate_parser_config(project_name)
         
         if config_path:
@@ -638,13 +665,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", "Failed to generate parser config")
 
     def generate_parser_config(self, project_name: str):
-        """Генерирует config.conf для проекта на основе VM таблицы"""
-        
-        # Путь к проекту
         project_path = os.path.join(self.project_manager.projects_dir, project_name)
         config_path = os.path.join(project_path, "config.conf")
         
-        # Собираем переменные из VM таблицы
         variables = []
         if hasattr(self, 'vm_table'):
             for row in range(self.vm_table.table.rowCount()):
@@ -662,7 +685,6 @@ class MainWindow(QMainWindow):
                         "type": "text"
                     }
                     
-                    # Тип переменной из ComboBox
                     if type_combo:
                         var_type = type_combo.currentText().lower()
                         if var_type == "dynamic":
@@ -672,20 +694,17 @@ class MainWindow(QMainWindow):
                             if url_item and url_item.text():
                                 var["url"] = url_item.text()
                     
-                    # Добавляем sample как описание
                     if sample_item and sample_item.text():
                         var["sample"] = sample_item.text()
                     
                     variables.append(var)
         
-        # Получаем текущий URL из активной вкладки браузера
         current_url = "https://example.com"
         if hasattr(self, 'browser_widget'):
             current_tab = self.browser_widget.get_current_tab()
             if current_tab:
                 current_url = current_tab.get_current_url()
         
-        # Формируем config.conf
         config_content = f"""[PROJECT]
 name = {project_name}
 url = {current_url}
@@ -725,7 +744,6 @@ bot_token =
 chat_id = 
 """
         
-        # Сохраняем config.conf
         with open(config_path, 'w', encoding='utf-8') as f:
             f.write(config_content)
         
@@ -799,7 +817,6 @@ chat_id =
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
-        # Информационная метка
         info_label = QLabel("🔧 Build Configuration\n\n"
                            "• Click 'Build' to generate parser config\n"
                            "• Config will be saved to project folder\n"
@@ -913,7 +930,6 @@ chat_id =
         self.btn_run.clicked.connect(self.on_run_clicked)
     
     def on_build_clicked(self):
-        """Обработчик кнопки Build — генерирует config.conf для парсера"""
         self.log("🔨 Build started...")
         
         current = self.project_list.currentItem()
@@ -924,10 +940,8 @@ chat_id =
         
         project_name = current.text().replace("📂  ", "")
         
-        # Сохраняем проект перед генерацией
         self.on_save_project()
         
-        # Генерируем config.conf
         config_path = self.generate_parser_config(project_name)
         
         if config_path and os.path.exists(config_path):
@@ -977,14 +991,14 @@ chat_id =
             }
         """
         
-        tabs = [self.tab_browser, self.tab_project, self.tab_vm, self.tab_build, self.tab_test]
+        tabs = [self.tab_browser, self.tab_project, self.tab_vm, self.tab_build, self.tab_test, self.tab_script]
         for i, tab in enumerate(tabs):
             if i == index:
                 tab.setStyleSheet(tab_style_active)
             else:
                 tab.setStyleSheet(tab_style_normal)
         
-        tab_names = ["Browser", "Project", "VM", "Build", "Test"]
+        tab_names = ["Browser", "Project", "VM", "Build", "Test", "Script Editor"]
         self.log(f"Switched to {tab_names[index]} tab")
     
     def toggle_maximized(self):
