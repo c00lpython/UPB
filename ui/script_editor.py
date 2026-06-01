@@ -144,7 +144,7 @@ class ScriptEditor(QWidget):
         
         # Левая часть — кнопки
         buttons_widget = QWidget()
-        buttons_widget.setMaximumWidth(450)
+        buttons_widget.setMaximumWidth(550)
         buttons_layout = QVBoxLayout(buttons_widget)
         buttons_layout.setSpacing(5)
         
@@ -153,6 +153,7 @@ class ScriptEditor(QWidget):
         row1.setSpacing(5)
         
         self.btn_load_vars = QPushButton("📦 Load Variables")
+        self.btn_save_workflow = QPushButton("💾 Save Workflow")
         self.btn_export = QPushButton("📤 Export")
         self.btn_import = QPushButton("📥 Import")
         self.btn_compile = QPushButton("⚙️ Compile")
@@ -184,17 +185,33 @@ class ScriptEditor(QWidget):
             }
         """
         
+        btn_style_success = """
+            QPushButton {
+                background-color: #2e7d32;
+                color: white;
+                padding: 5px 10px;
+                border: none;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #1b5e20;
+            }
+        """
+        
         self.btn_load_vars.setStyleSheet(btn_style_primary)
+        self.btn_save_workflow.setStyleSheet(btn_style_success)
         self.btn_export.setStyleSheet(btn_style)
         self.btn_import.setStyleSheet(btn_style)
         self.btn_compile.setStyleSheet(btn_style)
         
         self.btn_load_vars.clicked.connect(self.load_variables_to_n8n)
+        self.btn_save_workflow.clicked.connect(self.save_current_workflow)
         self.btn_export.clicked.connect(self.export_current_workflow)
         self.btn_import.clicked.connect(self.import_workflow_to_n8n)
         self.btn_compile.clicked.connect(self.compile_workflow_to_script)
         
         row1.addWidget(self.btn_load_vars)
+        row1.addWidget(self.btn_save_workflow)
         row1.addWidget(self.btn_export)
         row1.addWidget(self.btn_import)
         row1.addWidget(self.btn_compile)
@@ -291,6 +308,7 @@ class ScriptEditor(QWidget):
         project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
         project_path_normalized = project_path.replace('\\', '/')
         
+        # Экранируем путь для JS
         js = f"""
         (function() {{
             localStorage.setItem('upb_project_path', '{project_path_normalized}');
@@ -304,85 +322,138 @@ class ScriptEditor(QWidget):
         self.n8n_browser.page().runJavaScript(js)
         self.log(f"📁 Project path injected: {project_path_normalized}")
     
+    def save_current_workflow(self):
+        """Сохраняет текущий workflow в проект как JSON"""
+        if not self.project_manager or not self.project_manager.current_project:
+            QMessageBox.warning(self, "No Project", "Open a project first!")
+            return
+        
+        try:
+            response = requests.get(f"{self.n8n_url}/api/v1/workflows", timeout=5)
+            if response.status_code != 200:
+                self.log("❌ Cannot connect to n8n")
+                QMessageBox.warning(self, "Error", "n8n is not running!")
+                return
+            
+            workflows = response.json().get('data', [])
+            if not workflows:
+                QMessageBox.warning(self, "No Workflow", "Create a workflow first!")
+                return
+            
+            if len(workflows) == 1:
+                workflow = workflows[0]
+            else:
+                items = [f"{wf['name']} (ID: {wf['id']})" for wf in workflows]
+                selected, ok = QInputDialog.getItem(self, "Save Workflow", "Choose workflow to save:", items, 0, False)
+                if not ok:
+                    return
+                idx = items.index(selected)
+                workflow = workflows[idx]
+            
+            wf_response = requests.get(f"{self.n8n_url}/api/v1/workflows/{workflow['id']}")
+            workflow_data = wf_response.json()
+            
+            workflow_data['upb_metadata'] = {
+                'saved_at': datetime.now().isoformat(),
+                'project': self.project_manager.current_project,
+                'version': '1.0'
+            }
+            
+            project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
+            workflows_dir = os.path.join(project_path, "workflows")
+            os.makedirs(workflows_dir, exist_ok=True)
+            
+            safe_name = "".join(c for c in workflow['name'] if c.isalnum() or c in ' ._-')
+            workflow_file = os.path.join(workflows_dir, f"{safe_name}.json")
+            
+            with open(workflow_file, 'w', encoding='utf-8') as f:
+                json.dump(workflow_data, f, indent=2, ensure_ascii=False)
+            
+            self.log(f"✅ Workflow saved: {workflow['name']}")
+            self.log(f"   📁 Location: {workflow_file}")
+            QMessageBox.information(self, "Success", f"Workflow saved to:\n{workflow_file}")
+            
+        except Exception as e:
+            self.log(f"❌ Save error: {e}")
+            QMessageBox.warning(self, "Error", str(e))
+    
     def load_variables_to_n8n(self):
-        """Загружает переменные из config.conf текущего проекта"""
+        """Загружает переменные из variables.xlsx текущего проекта"""
         if not self.project_manager or not self.project_manager.current_project:
             QMessageBox.warning(self, "No Project", "Open a project first!")
             return
         
         project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
-        config_path = os.path.join(project_path, "config.conf")
+        variables_file = os.path.join(project_path, "variables.xlsx")
         
-        self.log(f"📂 Looking for config.conf in: {config_path}")
+        self.log(f"📂 Looking for variables.xlsx in: {variables_file}")
         
-        if not os.path.exists(config_path):
-            self.log(f"❌ config.conf not found")
-            QMessageBox.warning(self, "Error", f"config.conf not found!\n\n{config_path}")
+        if not os.path.exists(variables_file):
+            self.log(f"❌ variables.xlsx not found")
+            QMessageBox.warning(self, "Error", f"variables.xlsx not found!\n\nPlease add variables in VM table and save project.")
             return
         
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            import pandas as pd
+            df = pd.read_excel(variables_file)
             
-            # Parse [VARIABLES] section
-            match = re.search(r'\[VARIABLES\]\s*items\s*=\s*(\[.*?\])', content, re.DOTALL)
-            if not match:
-                self.log("❌ No [VARIABLES] section found")
-                QMessageBox.warning(self, "Error", "No [VARIABLES] section found in config.conf")
-                return
-            
-            variables = json.loads(match.group(1))
+            variables = []
+            for _, row in df.iterrows():
+                var = {
+                    'name': row.get('Name', ''),
+                    'selector': row.get('XPath/CSS', ''),
+                    'type': row.get('Type', 'Static'),
+                    'url': row.get('URL', ''),
+                    'sample': row.get('Sample Text', '')
+                }
+                if var['name']:
+                    variables.append(var)
             
             if not variables:
-                self.log("⚠️ No variables found")
+                self.log("⚠️ No variables found in variables.xlsx")
                 return
             
-            var_list = '\n'.join([f"• {v.get('name', '?')} → {v.get('selector', '')[:40]}" for v in variables[:10]])
-            self.log(f"✅ Loaded {len(variables)} variables:\n{var_list}")
+            var_list = '\n'.join([f"• {v.get('name')} → {v.get('selector', '')[:40]}" for v in variables[:10]])
+            self.log(f"✅ Loaded {len(variables)} variables from variables.xlsx:\n{var_list}")
             
-            # Save variables to temp file for n8n
-            temp_vars_file = os.path.join(project_path, ".upb_vars.json")
-            with open(temp_vars_file, 'w', encoding='utf-8') as f:
-                json.dump(variables, f, ensure_ascii=False, indent=2)
-            
-            # Inject variables into n8n
+            # Сохраняем в JSON для n8n
             vars_json = {}
             for v in variables:
-                vars_json[v.get('name')] = {
+                vars_json[v['name']] = {
                     'selector': v.get('selector', ''),
                     'url': v.get('url', ''),
                     'type': v.get('type', 'text')
                 }
             
+            # Инжектим в n8n
+            vars_json_str = json.dumps(vars_json)
             js = f"""
             (function() {{
-                localStorage.setItem('upb_variables', '{json.dumps(vars_json)}');
+                window.upbVariables = {vars_json_str};
+                localStorage.setItem('upb_variables', '{vars_json_str}');
                 localStorage.setItem('upb_variables_count', '{len(variables)}');
-                localStorage.setItem('upb_vars_file', '{temp_vars_file.replace('\\', '/')}');
                 console.log('UPB: Loaded {len(variables)} variables');
                 window.dispatchEvent(new CustomEvent('upb_variables_loaded', {{
-                    detail: {{ variables: {json.dumps(vars_json)} }}
+                    detail: {{ variables: {vars_json_str} }}
                 }}));
             }})();
             """
             self.n8n_browser.page().runJavaScript(js)
             
             QMessageBox.information(self, "Variables Loaded", 
-                f"Loaded {len(variables)} variables from config.conf\n\n"
+                f"Loaded {len(variables)} variables from variables.xlsx\n\n"
                 f"Project: {project_path}\n\n"
-                f"Variables:\n{var_list[:500]}\n\n"
-                f"Now add UPBParser node in n8n, select 'Load Project Variables'\n"
-                f"and enter the project path:\n{project_path}")
+                f"Variables:\n{var_list[:500]}")
             
-        except json.JSONDecodeError as e:
-            self.log(f"❌ JSON error: {e}")
-            QMessageBox.warning(self, "Error", f"Invalid JSON in config.conf:\n{e}")
+        except ImportError:
+            self.log("❌ pandas not installed. Run: pip install pandas openpyxl")
+            QMessageBox.warning(self, "Error", "pandas not installed!\n\nRun: pip install pandas openpyxl")
         except Exception as e:
-            self.log(f"❌ Error: {e}")
+            self.log(f"❌ Error loading variables: {e}")
             QMessageBox.warning(self, "Error", str(e))
-    
+
     def export_current_workflow(self):
-        """Экспорт текущего workflow из n8n в проект UPB"""
+        """Экспорт текущего workflow из n8n в проект UPB (копия)"""
         if not self.project_manager or not self.project_manager.current_project:
             QMessageBox.warning(self, "No Project", "Open a project first!")
             return
@@ -417,7 +488,7 @@ class ScriptEditor(QWidget):
             os.makedirs(workflows_dir, exist_ok=True)
             
             safe_name = "".join(c for c in workflow['name'] if c.isalnum() or c in ' ._-')
-            workflow_file = os.path.join(workflows_dir, f"{safe_name}.json")
+            workflow_file = os.path.join(workflows_dir, f"{safe_name}_export.json")
             
             with open(workflow_file, 'w', encoding='utf-8') as f:
                 json.dump(workflow_data, f, indent=2, ensure_ascii=False)
@@ -479,6 +550,7 @@ class ScriptEditor(QWidget):
             response = requests.get(f"{self.n8n_url}/api/v1/workflows", timeout=5)
             if response.status_code != 200:
                 self.log("❌ Cannot connect to n8n")
+                QMessageBox.warning(self, "Error", "n8n is not running!")
                 return
             
             workflows = response.json().get('data', [])
@@ -486,7 +558,15 @@ class ScriptEditor(QWidget):
                 QMessageBox.warning(self, "No Workflow", "Create a workflow first!")
                 return
             
-            workflow = workflows[-1]
+            if len(workflows) == 1:
+                workflow = workflows[0]
+            else:
+                items = [f"{wf['name']} (ID: {wf['id']})" for wf in workflows]
+                selected, ok = QInputDialog.getItem(self, "Compile Workflow", "Choose workflow to compile:", items, 0, False)
+                if not ok:
+                    return
+                idx = items.index(selected)
+                workflow = workflows[idx]
             
             wf_response = requests.get(f"{self.n8n_url}/api/v1/workflows/{workflow['id']}")
             workflow_data = wf_response.json()
@@ -499,37 +579,96 @@ class ScriptEditor(QWidget):
             with open(script_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(script_lines))
             
-            self.log(f"✅ Compiled to: {script_path}")
-            QMessageBox.information(self, "Success", f"Script compiled!\n\n{script_path}")
+            self.log(f"✅ Compiled '{workflow['name']}' to script.txt")
+            self.log(f"   📁 Location: {script_path}")
+            commands_count = len([l for l in script_lines if l and not l.startswith('#')])
+            self.log(f"   📊 Commands: {commands_count}")
+            
+            QMessageBox.information(self, "Success", 
+                f"Workflow compiled to script.txt!\n\n"
+                f"Location: {script_path}\n"
+                f"Commands: {commands_count}")
             
         except Exception as e:
             self.log(f"❌ Compilation error: {e}")
+            QMessageBox.warning(self, "Error", str(e))
     
     def _workflow_to_script(self, workflow_data):
         """Конвертирует workflow в команды script.txt"""
         lines = []
         lines.append(f"# Workflow: {workflow_data.get('name', 'untitled')}")
+        lines.append(f"# ID: {workflow_data.get('id', 'unknown')}")
         lines.append(f"# Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("")
+        lines.append("# ============================================")
+        lines.append("# UPB Parser Script")
+        lines.append("# ============================================")
+        lines.append("")
         
-        for node in workflow_data.get('nodes', []):
+        nodes = workflow_data.get('nodes', [])
+        nodes_sorted = sorted(nodes, key=lambda n: n.get('position', [0, 0])[1])
+        
+        for node in nodes_sorted:
             node_type = node.get('type', '')
+            node_name = node.get('name', 'unknown')
             params = node.get('parameters', {})
+            
+            lines.append(f"# Node: {node_name}")
             
             if node_type == 'n8n-nodes-base.upbParser':
                 operation = params.get('operation', '')
-                if operation == 'extractText':
+                if operation == 'loadVariables':
+                    lines.append("# Variables loaded from project")
+                    lines.append("")
+                    continue
+                elif operation == 'extractText':
                     selector = params.get('selector', '')
                     save_to = params.get('saveTo', 'result')
                     lines.append(f"extract_text {selector} -> {save_to}")
+                elif operation == 'extractAttribute':
+                    selector = params.get('selector', '')
+                    attribute = params.get('attributeName', 'href')
+                    save_to = params.get('saveTo', 'result')
+                    lines.append(f"extract_attribute {selector} {attribute} -> {save_to}")
+                elif operation == 'extractHtml':
+                    selector = params.get('selector', '')
+                    save_to = params.get('saveTo', 'result')
+                    lines.append(f"extract_html {selector} -> {save_to}")
+                elif operation == 'extractList':
+                    container = params.get('containerSelector', '')
+                    save_to = params.get('saveTo', 'result')
+                    lines.append(f"extract_list {container} -> {save_to}")
                 elif operation == 'click':
                     lines.append(f"click {params.get('selector', '')}")
+                elif operation == 'type':
+                    text = params.get('text', '')
+                    lines.append(f"type {params.get('selector', '')} \"{text}\"")
                 elif operation == 'wait':
                     lines.append(f"wait {params.get('seconds', 1)}")
-                elif operation == 'type':
-                    lines.append(f"type {params.get('selector', '')} \"{params.get('text', '')}\"")
                 elif operation == 'openUrl':
                     lines.append(f"open_url {params.get('url', '')}")
+                elif operation == 'screenshot':
+                    lines.append(f"screenshot {params.get('filename', 'screenshot.png')}")
+                elif operation == 'saveExcel':
+                    lines.append(f"save_excel {params.get('data', '')} -> {params.get('filename', 'output.xlsx')}")
+                elif operation == 'saveJson':
+                    lines.append(f"save_json {params.get('data', '')} -> {params.get('filename', 'output.json')}")
+                elif operation == 'createVariable':
+                    lines.append(f"create_var {params.get('varName', '')} = {params.get('varValue', '')}")
+                elif operation == 'updateVariable':
+                    lines.append(f"update_var {params.get('varName', '')} = {params.get('varValue', '')}")
+                elif operation == 'createList':
+                    lines.append(f"create_list {params.get('varName', '')}")
+                elif operation == 'appendToList':
+                    lines.append(f"append_list {params.get('listName', '')} {params.get('varValue', '')}")
+                elif operation == 'print':
+                    lines.append(f"print {params.get('printValue', '')}")
+                elif operation == 'log':
+                    msg = params.get('message', '')
+                    level = params.get('logLevel', 'info')
+                    lines.append(f"log {msg} level={level}")
+                else:
+                    lines.append(f"# Unknown operation: {operation}")
             
             elif node_type == 'n8n-nodes-base.httpRequest':
                 url = params.get('url', '')
@@ -537,7 +676,23 @@ class ScriptEditor(QWidget):
                 lines.append(f"http_{method.lower()} {url}")
             
             elif node_type == 'n8n-nodes-base.manualTrigger':
-                lines.append("# Manual trigger")
+                lines.append("# Manual trigger - run on demand")
+                continue
+            
+            elif node_type == 'n8n-nodes-base.scheduleTrigger':
+                lines.append("# Schedule trigger - runs automatically")
+                continue
+            
+            elif node_type == 'n8n-nodes-base.webhook':
+                path = params.get('path', '')
+                lines.append(f"# Webhook trigger at: /webhook/{path}")
+                continue
+            
+            else:
+                lines.append(f"# Unsupported node type: {node_type}")
+                continue
+            
+            lines.append("")
         
         return lines
     
@@ -549,6 +704,12 @@ class ScriptEditor(QWidget):
             self.project_info.setText(f"📁 Project: {project_name}")
             self.project_info.setStyleSheet("color: #0e639c; font-size: 11px;")
             self.inject_project_path_to_n8n()
+            
+            script_path = os.path.join(project_path, "script.txt")
+            if os.path.exists(script_path):
+                self.log(f"📄 Existing script.txt found in project")
+            else:
+                self.log(f"📄 No script.txt yet. Create a workflow and compile it!")
         else:
             self.project_info.setText("📁 No project opened")
             self.project_info.setStyleSheet("color: #787878; font-size: 11px;")
