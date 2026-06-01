@@ -1,0 +1,30 @@
+{
+  "name": "n8n-nodes-upb-parser",
+  "version": "1.0.0",
+  "description": "UPB Parser node for n8n - web scraping with CSS/XPath selectors",
+  "keywords": ["n8n-community-node-package", "n8n", "upb", "web-scraping"],
+  "license": "MIT",
+  "author": {
+    "name": "UPB",
+    "email": ""
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "files": ["dist"],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "nodes": ["dist/nodes/UPBParser/UPBParser.node.js"]
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "*",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0",
+    "n8n-workflow": "*"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}

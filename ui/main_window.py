@@ -174,6 +174,7 @@ class MainWindow(QMainWindow):
         self.current_tab_index = 0
     
     def create_browser_view(self):
+        """Создаёт браузер с профилем из открытого проекта или временный"""
         panel = QWidget()
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -181,27 +182,56 @@ class MainWindow(QMainWindow):
         
         from PyQt6.QtWebEngineCore import QWebEngineProfile
         
-        temp_id = str(uuid.uuid4())[:8]
-        temp_profile = QWebEngineProfile(f"Temporary_{temp_id}")
-        temp_profile.setPersistentStoragePath(f"temp_profile_{temp_id}")
-        temp_profile.setPersistentCookiesPolicy(
-            QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies
-        )
+        # Проверяем, есть ли открытый проект
+        if self.project_manager and self.project_manager.current_project:
+            project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
+            profile_path = os.path.join(project_path, "profile")
+            
+            # Создаём папку профиля если её нет
+            os.makedirs(profile_path, exist_ok=True)
+            
+            # Используем профиль проекта
+            profile = QWebEngineProfile(f"UPB_{self.project_manager.current_project}")
+            profile.setPersistentStoragePath(profile_path)
+            profile.setPersistentCookiesPolicy(
+                QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
+            )
+            
+            print(f"\n{'='*70}")
+            print(f"🔧 [MAIN] ЗАГРУЗКА ПРОФИЛЯ ПРОЕКТА")
+            print(f"{'='*70}")
+            print(f"   📁 Проект: {self.project_manager.current_project}")
+            print(f"   📁 Путь профиля: {profile_path}")
+            print(f"   🍪 Политика кук: ForcePersistentCookies")
+            print(f"{'='*70}\n")
+            
+        else:
+            # Нет открытого проекта — создаём временный профиль
+            import uuid
+            temp_id = str(uuid.uuid4())[:8]
+            profile = QWebEngineProfile(f"Temporary_{temp_id}")
+            profile.setPersistentStoragePath(f"temp_profile_{temp_id}")
+            profile.setPersistentCookiesPolicy(
+                QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies
+            )
+            
+            print(f"\n{'='*70}")
+            print(f"🔧 [MAIN] СОЗДАНИЕ ВРЕМЕННОГО БРАУЗЕРА")
+            print(f"{'='*70}")
+            print(f"   📁 Путь хранения: {profile.persistentStoragePath()}")
+            print(f"   🍪 Политика кук: NoPersistentCookies")
+            print(f"   🆔 ID: {temp_id}")
+            print(f"{'='*70}\n")
         
-        print(f"\n{'='*70}")
-        print(f"🔧 [MAIN] СОЗДАНИЕ ВРЕМЕННОГО БРАУЗЕРА")
-        print(f"{'='*70}")
-        print(f"   📁 Путь хранения: {temp_profile.persistentStoragePath()}")
-        print(f"   🍪 Политика кук: NoPersistentCookies")
-        print(f"   🆔 ID: {temp_id}")
-        print(f"{'='*70}\n")
+        # Создаём виджет браузера
+        self.browser_widget = BrowserWidget(profile)
         
-        self.browser_widget = BrowserWidget(temp_profile)
-        
+        # Подключаем сигналы
         self.browser_widget.url_changed.connect(self.on_browser_url_changed)
         self.browser_widget.devtools_changed.connect(self.on_devtools_changed)
         self.browser_widget.selector_captured.connect(self.on_selector_captured)
         
+        # Контейнер для DevTools
         self.devtools_container = QWidget()
         self.devtools_container.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #787878;")
         self.devtools_container_layout = QVBoxLayout(self.devtools_container)
@@ -209,6 +239,7 @@ class MainWindow(QMainWindow):
         
         self.current_devtools_view = None
         
+        # Разделитель (браузер + DevTools)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.browser_widget)
         splitter.addWidget(self.devtools_container)

@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "lib": ["es2020", "dom"],
+    "types": ["node"],
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./",
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": ["nodes/UPBParser/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
