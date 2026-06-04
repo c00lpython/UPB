@@ -11,16 +11,92 @@ class Block:
         self.position = {"x": x, "y": y}
         self.size = {"width": 160, "height": 60}
         self.color = color
-        self.params = {}
+        self.params = self.get_default_params()
         self.parent_id = None
         self.children_ids = []
+        self.created_at = None
+        self.modified_at = None
     
     def get_default_params(self) -> dict:
         defaults = {
-            "startofwork": {"projectName": "", "headless": True, "timeout": 30},
-            "openurl": {"url": "", "waitStrategy": "load", "timeout": 30000},
+            "startofwork": {
+                "projectName": "", 
+                "headless": True, 
+                "timeout": 30
+            },
+            "openurl": {
+                "url": "", 
+                "waitStrategy": "load", 
+                "timeout": 30000
+            },
+            "click": {
+                "selector": "", 
+                "selectorType": "css", 
+                "clickCount": 1, 
+                "waitAfter": 1000, 
+                "waitForNavigation": False
+            },
+            "type": {
+                "selector": "", 
+                "selectorType": "css", 
+                "text": "", 
+                "clearFirst": True, 
+                "pressEnter": False, 
+                "delay": 0
+            },
+            "parsedata": {
+                "varName": "", 
+                "saveTo": "result", 
+                "extractType": "text", 
+                "attributeName": ""
+            },
+            "screenshot": {
+                "filename": "screenshot.png", 
+                "fullPage": False, 
+                "selector": ""
+            },
+            "convertexcel": {
+                "inputFile": "", 
+                "outputFormat": "csv", 
+                "outputFile": "", 
+                "sheetName": "Sheet1"
+            },
+            "forloop": {
+                "iterator": "item", 
+                "iterableType": "variable", 
+                "iterable": ""
+            },
+            "if": {
+                "left": "", 
+                "operator": "eq", 
+                "right": ""
+            },
+            "end": {
+                "blockType": "loop"
+            },
+            "reload": {
+                "waitAfter": 2000, 
+                "ignoreCache": True
+            },
+            "sendtelegram": {
+                "botToken": "", 
+                "chatId": "", 
+                "message": "", 
+                "parseMode": ""
+            },
+            "savedata": {
+                "dataVar": "", 
+                "format": "excel", 
+                "outputPath": "./output", 
+                "overwrite": True
+            },
+            "endsession": {
+                "saveResults": True, 
+                "closeBrowser": True, 
+                "exportReport": False
+            }
         }
-        return defaults.get(self.node_type, {})
+        return defaults.get(self.node_type, {}).copy()
 
 
 class Connection:
@@ -31,3 +107,4 @@ class Connection:
         self.to_block_id = to_block_id
         self.to_port = to_port
         self.data_type = data_type
+        self.created_at = None
