@@ -7,6 +7,7 @@ from PyQt6.QtGui import *
 from ui.SE.ui.blocks_palette import BlocksPalette
 from ui.SE.ui.canvas_widget import CanvasWidget
 from ui.SE.ui.properties_editor import PropertiesEditor
+from ui.SE.core.serialization import upb_serializer
 
 
 class ScriptEditor(QWidget):
@@ -16,6 +17,8 @@ class ScriptEditor(QWidget):
     def __init__(self, project_manager=None, parent=None):
         super().__init__(parent)
         self.project_manager = project_manager
+        self.current_project = None  # Добавлено для отслеживания текущего проекта
+        self.current_workflow_file = None
         self.init_ui()
     
     def init_ui(self):
@@ -76,22 +79,29 @@ class ScriptEditor(QWidget):
         self.btn_clear.setStyleSheet("QPushButton { background-color: #4a4a4a; color: #ddd; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #5a5a5a; }")
         self.btn_clear.clicked.connect(self.clear_canvas)
         
-        self.btn_save = QPushButton("💾 Save Scheme")
+        self.btn_save = QPushButton("💾 Save Workflow")
         self.btn_save.setMinimumWidth(130)
         self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.setStyleSheet("QPushButton { background-color: #2e7d32; color: white; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #1b5e20; }")
         self.btn_save.clicked.connect(self.save_workflow)
         
-        self.btn_load = QPushButton("📂 Load Scheme")
+        self.btn_load = QPushButton("📂 Load Workflow")
         self.btn_load.setMinimumWidth(130)
         self.btn_load.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_load.setStyleSheet("QPushButton { background-color: #6c3483; color: white; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #512e5f; }")
         self.btn_load.clicked.connect(self.load_workflow)
         
+        self.btn_new = QPushButton("✨ New Workflow")
+        self.btn_new.setMinimumWidth(130)
+        self.btn_new.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_new.setStyleSheet("QPushButton { background-color: #e67e22; color: white; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #d35400; }")
+        self.btn_new.clicked.connect(self.new_workflow)
+        
         bottom_layout.addWidget(self.btn_compile)
         bottom_layout.addWidget(self.btn_clear)
         bottom_layout.addWidget(self.btn_save)
         bottom_layout.addWidget(self.btn_load)
+        bottom_layout.addWidget(self.btn_new)
         
         self.status_label = QLabel("● Ready")
         self.status_label.setStyleSheet("QLabel { color: #2ecc71; font-size: 11px; font-weight: bold; padding: 0 10px; }")
@@ -120,6 +130,9 @@ class ScriptEditor(QWidget):
     
     def on_property_changed(self, block_id, prop_name, value):
         self.update_status(f"Updated {prop_name} = {str(value)[:40]}")
+        # Автосохранение после изменения свойства
+        if self.project_manager and self.project_manager.current_project:
+            self.auto_save_workflow()
     
     def update_status(self, message, is_error=False):
         self.log(message)
@@ -145,12 +158,32 @@ class ScriptEditor(QWidget):
         lines.append(f"# Generated: {QDateTime.currentDateTime().toString()}")
         lines.append(f"# Total blocks: {len(nodes)}")
         lines.append("")
+        lines.append("# ============================================")
+        lines.append("# Workflow Structure")
+        lines.append("# ============================================")
+        lines.append("")
+        
+        # Сначала сохраняем workflow для компиляции
+        if self.project_manager and self.project_manager.current_project:
+            project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
+            workflow_file = os.path.join(project_path, "workflow.json")
+            upb_serializer.save_project(self.canvas, workflow_file)
         
         for i, node in enumerate(nodes, 1):
             block = node.block
             lines.append(f"# [{i}] {block.name} ({block.node_type})")
+            lines.append(f"# Position: ({block.position['x']}, {block.position['y']})")
             cmd = self.block_to_command(block)
             lines.append(cmd)
+            lines.append("")
+        
+        # Добавляем секцию связей
+        if self.canvas.edges:
+            lines.append("# ============================================")
+            lines.append("# Connections")
+            lines.append("# ============================================")
+            for edge_id, edge in self.canvas.edges.items():
+                lines.append(f"# {edge.source.block.name} → {edge.destination.block.name}")
             lines.append("")
         
         if self.project_manager and self.project_manager.current_project:
@@ -167,20 +200,20 @@ class ScriptEditor(QWidget):
     def block_to_command(self, block) -> str:
         p = block.params
         commands = {
-            "startofwork": f"start_session project={p.get('projectName', '')} headless={p.get('headless', True)}",
-            "openurl": f"open_url url={p.get('url', '')} wait={p.get('waitStrategy', 'load')}",
-            "click": f"click selector={p.get('selector', '')}",
-            "type": f"type selector={p.get('selector', '')} text={p.get('text', '')}",
-            "parsedata": f"parse_data var={p.get('varName', '')} save_to={p.get('saveTo', 'result')}",
-            "screenshot": f"screenshot filename={p.get('filename', 'screenshot.png')}",
-            "convertexcel": f"convert_excel input={p.get('inputFile', '')} format={p.get('outputFormat', 'csv')}",
-            "forloop": f"for iterator={p.get('iterator', 'item')} in {p.get('iterable', '')}",
+            "startofwork": f"start_session project={p.get('projectName', '')} headless={p.get('headless', True)} timeout={p.get('timeout', 30)}",
+            "openurl": f"open_url url={p.get('url', '')} wait={p.get('waitStrategy', 'load')} timeout={p.get('timeout', 30000)}",
+            "click": f"click selector={p.get('selector', '')} type={p.get('selectorType', 'css')} count={p.get('clickCount', 1)} wait={p.get('waitAfter', 1000)}",
+            "type": f"type selector={p.get('selector', '')} type={p.get('selectorType', 'css')} text='{p.get('text', '')}' clear={p.get('clearFirst', True)} enter={p.get('pressEnter', False)}",
+            "parsedata": f"parse_data var={p.get('varName', '')} save_to={p.get('saveTo', 'result')} extract={p.get('extractType', 'text')}",
+            "screenshot": f"screenshot filename={p.get('filename', 'screenshot.png')} full={p.get('fullPage', False)}",
+            "convertexcel": f"convert_excel input={p.get('inputFile', '')} format={p.get('outputFormat', 'csv')} sheet={p.get('sheetName', 'Sheet1')}",
+            "forloop": f"for iterator={p.get('iterator', 'item')} type={p.get('iterableType', 'variable')} in {p.get('iterable', '')}",
             "if": f"if {p.get('left', '')} {p.get('operator', 'eq')} {p.get('right', '')}",
-            "end": f"end",
-            "reload": f"reload wait={p.get('waitAfter', 2000)}",
-            "sendtelegram": f"send_telegram token={p.get('botToken', '')} chat={p.get('chatId', '')} msg={p.get('message', '')}",
-            "savedata": f"save_data var={p.get('dataVar', '')} format={p.get('format', 'excel')}",
-            "endsession": f"end_session save={p.get('saveResults', True)} close={p.get('closeBrowser', True)}"
+            "end": f"end type={p.get('blockType', 'loop')}",
+            "reload": f"reload wait={p.get('waitAfter', 2000)} nocache={p.get('ignoreCache', True)}",
+            "sendtelegram": f"send_telegram token={p.get('botToken', '')} chat={p.get('chatId', '')} msg='{p.get('message', '')}' parse={p.get('parseMode', '')}",
+            "savedata": f"save_data var={p.get('dataVar', '')} format={p.get('format', 'excel')} path={p.get('outputPath', './output')} overwrite={p.get('overwrite', True)}",
+            "endsession": f"end_session save={p.get('saveResults', True)} close={p.get('closeBrowser', True)} report={p.get('exportReport', False)}"
         }
         return commands.get(block.node_type, f"# TODO: implement {block.node_type}")
     
@@ -194,56 +227,124 @@ class ScriptEditor(QWidget):
                 self.update_status("Canvas cleared")
     
     def save_workflow(self):
+        """Сохраняет workflow через сериализатор"""
         if not self.project_manager or not self.project_manager.current_project:
             QMessageBox.warning(self, "No Project", "Open a project first!")
             return
         
-        nodes = self.canvas.get_all_blocks()
         project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
-        scheme_path = os.path.join(project_path, "workflow.workscheme")
+        workflow_file = os.path.join(project_path, "workflow.json")
         
-        data = {"version": "1.0", "created": QDateTime.currentDateTime().toString(), "blocks": []}
-        for node in nodes:
-            block = node.block
-            data["blocks"].append({
-                "id": block.id,
-                "type": block.node_type,
-                "name": block.name,
-                "x": block.position["x"],
-                "y": block.position["y"],
-                "color": block.color,
-                "params": block.params
-            })
+        success = upb_serializer.save_project(self.canvas, workflow_file)
         
-        with open(scheme_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        self.update_status(f"Saved to {scheme_path}")
-        QMessageBox.information(self, "Success", f"Scheme saved!\n\n{scheme_path}")
+        if success:
+            self.current_workflow_file = workflow_file
+            self.update_status(f"✅ Workflow saved to {workflow_file}")
+            QMessageBox.information(self, "Success", f"Workflow saved!\n\n{workflow_file}")
+        else:
+            self.update_status("❌ Failed to save workflow", True)
+            QMessageBox.warning(self, "Error", "Failed to save workflow!")
     
     def load_workflow(self):
+        """Загружает workflow через сериализатор"""
         if not self.project_manager or not self.project_manager.current_project:
             QMessageBox.warning(self, "No Project", "Open a project first!")
             return
         
         project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
-        scheme_path = os.path.join(project_path, "workflow.workscheme")
+        workflow_file = os.path.join(project_path, "workflow.json")
         
-        if not os.path.exists(scheme_path):
-            QMessageBox.warning(self, "Not Found", f"No workflow.workscheme found")
+        if not os.path.exists(workflow_file):
+            QMessageBox.warning(self, "Not Found", f"No workflow.json found in project folder!")
             return
         
-        try:
-            with open(scheme_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        # Спрашиваем подтверждение
+        if len(self.canvas.get_all_blocks()) > 0:
+            reply = QMessageBox.question(self, "Load Workflow", 
+                                         "Current workflow will be lost. Continue?",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        
+        success = upb_serializer.load_project(workflow_file, self.canvas)
+        
+        if success:
+            self.current_workflow_file = workflow_file
+            self.update_status(f"✅ Workflow loaded from {workflow_file}")
+            QMessageBox.information(self, "Success", f"Workflow loaded!\n\nBlocks: {len(self.canvas.get_all_blocks())}")
+        else:
+            self.update_status("❌ Failed to load workflow", True)
+            QMessageBox.warning(self, "Error", "Failed to load workflow!")
+    
+    def new_workflow(self):
+        """Создаёт новый workflow"""
+        if len(self.canvas.get_all_blocks()) > 0:
+            reply = QMessageBox.question(self, "New Workflow", 
+                                         "Current workflow will be lost. Create new?",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        
+        self.canvas.clear()
+        self.properties.set_block(None)
+        self.current_workflow_file = None
+        self.update_status("✨ New workflow created")
+    
+    def auto_save_workflow(self):
+        """Автоматическое сохранение при изменениях"""
+        if self.project_manager and self.project_manager.current_project:
+            project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
+            workflow_file = os.path.join(project_path, "workflow.json")
+            upb_serializer.save_project(self.canvas, workflow_file)
+            # Не выводим уведомление при автосохранении
+    
+    def update_project(self, project_name: str):
+        """
+        Обновляет проект при переключении между проектами
+        Вызывается из main_window при открытии/создании проекта
+        """
+        # Сохраняем текущий workflow в старый проект если был открыт
+        if self.current_project and self.project_manager:
+            old_project_path = os.path.join(self.project_manager.projects_dir, self.current_project)
+            old_workflow_file = os.path.join(old_project_path, "workflow.json")
+            upb_serializer.save_project(self.canvas, old_workflow_file)
+            self.update_status(f"💾 Saved workflow to: {self.current_project}")
+        
+        # Обновляем текущий проект
+        self.current_project = project_name
+        
+        if project_name and self.project_manager:
+            project_path = os.path.join(self.project_manager.projects_dir, project_name)
+            workflow_file = os.path.join(project_path, "workflow.json")
+            
+            # Очищаем канвас перед загрузкой
             self.canvas.clear()
-            for block_data in data.get("blocks", []):
-                self.canvas.add_block_from_data(
-                    block_data["type"],
-                    block_data["name"],
-                    block_data["x"],
-                    block_data["y"],
-                    block_data.get("color", "#3498db")
-                )
-            self.update_status(f"Loaded {len(data.get('blocks', []))} blocks")
-        except Exception as e:
-            self.update_status(f"Error loading: {e}", True)
+            self.properties.set_block(None)
+            
+            if os.path.exists(workflow_file):
+                # Загружаем сохранённый workflow
+                success = upb_serializer.load_project(workflow_file, self.canvas)
+                if success:
+                    self.update_status(f"📁 Loaded workflow for: {project_name}")
+                    block_count = len(self.canvas.get_all_blocks())
+                    self.block_count_label.setText(f"{block_count} blocks")
+                else:
+                    self.update_status(f"⚠️ Could not load workflow for: {project_name}", True)
+                    self.block_count_label.setText("0 blocks")
+            else:
+                # Новый проект - пустой канвас
+                self.update_status(f"📁 New project: {project_name} (no workflow yet)")
+                self.block_count_label.setText("0 blocks")
+            
+            # Обновляем заголовок окна
+            if self.parent() and hasattr(self.parent(), 'setWindowTitle'):
+                self.parent().setWindowTitle(f"UPB - {project_name}")
+    
+    def closeEvent(self, event):
+        """При закрытии редактора сохраняем текущий workflow"""
+        if self.current_project and self.project_manager:
+            project_path = os.path.join(self.project_manager.projects_dir, self.current_project)
+            workflow_file = os.path.join(project_path, "workflow.json")
+            upb_serializer.save_project(self.canvas, workflow_file)
+            self.update_status(f"💾 Auto-saved workflow for: {self.current_project}")
+        super().closeEvent(event)
