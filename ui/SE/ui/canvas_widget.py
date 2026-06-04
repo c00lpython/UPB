@@ -569,38 +569,41 @@ class GraphNode(QGraphicsRectItem):
             original_edge.hide()
         return proxy_edge
     
+
     def contextMenuEvent(self, event):
         menu = QMenu()
+        
         title_action = menu.addAction(f"Block: {self.block.name}")
         title_action.setEnabled(False)
         menu.addSeparator()
-        if self.parent_node:
-            parent_action = menu.addAction(f"📤 Exit from '{self.parent_node.block.name}'")
-            parent_action.triggered.connect(self.remove_from_parent)
-        else:
-            menu.addAction("🔝 Root block (no parent)").setEnabled(False)
-        if self.child_nodes:
-            menu.addSeparator()
-            children_menu = menu.addMenu("📋 Children")
-            for child in self.child_nodes:
-                child_action = children_menu.addAction(f"• {child.block.name}")
-                child_action.triggered.connect(lambda checked, c=child: self.canvas.select_block(c.block.id))
-        menu.addSeparator()
-        if self.collapsed:
-            expand_action = menu.addAction("🔽 Expand")
-            expand_action.triggered.connect(lambda: self.toggle_collapse() if self.collapsed else None)
-        else:
-            collapse_action = menu.addAction("🔼 Collapse")
-            collapse_action.triggered.connect(lambda: self.toggle_collapse() if not self.collapsed else None)
+        
         rename_action = menu.addAction("✏️ Rename")
         rename_action.triggered.connect(self._rename_block)
+        menu.addAction(rename_action)
+        
+        menu.addSeparator()
+        
         delete_action = menu.addAction("🗑️ Delete")
         delete_action.triggered.connect(self._delete_block)
+        menu.addAction(delete_action)
+        
+        if self.child_nodes:
+            menu.addSeparator()
+            menu.addAction(f"📦 Children: {len(self.child_nodes)}").setEnabled(False)
+        
+        if self.parent_node:
+            menu.addSeparator()
+            exit_action = menu.addAction(f"📤 Exit from '{self.parent_node.block.name}'")
+            exit_action.triggered.connect(self.remove_from_parent)
+            menu.addAction(exit_action)
+        
         menu.addSeparator()
         info_action = menu.addAction(f"ID: {self.block.id}")
         info_action.setEnabled(False)
+        menu.addAction(info_action)
+        
         menu.exec(event.screenPos())
-    
+
     def _select_child(self, child_node):
         self.canvas.select_block(child_node.block.id)
     
@@ -903,19 +906,32 @@ class GraphEdge(QGraphicsPathItem):
         self.inheritance_color = QColor("#9b59b6")
         self.proxy_color = QColor("#f39c12")
     
+
     def contextMenuEvent(self, event):
         menu = QMenu()
-        delete_action = QAction("🗑️ Delete connection", menu)
+        
+        info_action = menu.addAction(f"Connection: {self.source.block.name} → {self.destination.block.name}")
+        info_action.setEnabled(False)
+        menu.addSeparator()
+        
+        delete_action = menu.addAction("🗑️ Delete connection")
         delete_action.triggered.connect(self.delete_connection)
         menu.addAction(delete_action)
+        
         menu.addSeparator()
-        info_action = QAction(f"ID: {self.connection.id}", menu)
-        info_action.setEnabled(False)
-        menu.addAction(info_action)
+        id_action = menu.addAction(f"ID: {self.connection.id[:8]}...")
+        id_action.setEnabled(False)
+        menu.addAction(id_action)
+        
         menu.exec(event.screenPos())
 
     def delete_connection(self):
+        """Удаляет соединение"""
         if self.canvas:
+            # Восстанавливаем оригинальные edge если есть
+            if hasattr(self, 'original_edge') and self.original_edge:
+                self.original_edge.show()
+            
             self.canvas.remove_connection(self.connection.id)
     
     def set_source(self, node):
@@ -1117,7 +1133,69 @@ class CanvasWidget(QGraphicsView):
         self.status_label = None
         
         print("🏁 [CANVAS] __init__ END")
-    
+
+    def delete_selected_blocks(self):
+        """Удаляет все выбранные блоки и их связи"""
+        selected_items = self.scene.selectedItems()
+        blocks_to_delete = [item for item in selected_items if isinstance(item, GraphNode)]
+        
+        if not blocks_to_delete:
+            self._update_status("No blocks selected to delete", is_warning=True)
+            return False
+        
+        # Подтверждение если больше 1 блока
+        if len(blocks_to_delete) > 1:
+            reply = QMessageBox.question(
+                None, 
+                "Delete Blocks", 
+                f"Delete {len(blocks_to_delete)} selected blocks and their connections?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return False
+        
+        deleted_count = 0
+        for node in blocks_to_delete:
+            if self.remove_block(node.block.id):
+                deleted_count += 1
+        
+        self._update_status(f"✅ Deleted {deleted_count} blocks")
+        self.block_selected.emit(None)
+        return True
+
+    def delete_all_blocks(self):
+        """Удаляет все блоки на канвасе"""
+        if not self.nodes:
+            return False
+        
+        reply = QMessageBox.question(
+            None, 
+            "Clear Canvas", 
+            f"Delete all {len(self.nodes)} blocks and their connections?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.clear()
+            self._update_status("✅ All blocks deleted")
+            self.block_selected.emit(None)
+            return True
+        return False
+
+    def delete_selected_connections(self):
+        """Удаляет все выбранные связи"""
+        selected_items = self.scene.selectedItems()
+        edges_to_delete = [item for item in selected_items if isinstance(item, GraphEdge)]
+        
+        if not edges_to_delete:
+            return False
+        
+        deleted_count = 0
+        for edge in edges_to_delete:
+            if self.remove_connection(edge.connection.id):
+                deleted_count += 1
+        
+        self._update_status(f"✅ Deleted {deleted_count} connections")
+        return True
     def _update_status(self, message: str, is_warning: bool = False):
         try:
             if not message or message.strip() == "":
@@ -1139,7 +1217,57 @@ class CanvasWidget(QGraphicsView):
                     self.status_label.setStyleSheet("")
         except Exception as e:
             print(f"Error updating status: {e}")
-    
+    # В классе CanvasWidget добавь метод keyPressEvent:
+
+    def keyPressEvent(self, event):
+        """Обработка горячих клавиш"""
+        # Delete - удалить выбранные блоки
+        if event.key() == Qt.Key.Key_Delete:
+            self.delete_selected_blocks()
+            event.accept()
+            return
+        
+        # Ctrl+A - выделить все блоки
+        if event.key() == Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            for node in self.nodes.values():
+                node.setSelected(True)
+            self._update_status(f"✅ Selected {len(self.nodes)} blocks")
+            event.accept()
+            return
+        
+        # Ctrl+Shift+A - снять выделение
+        if event.key() == Qt.Key.Key_A and event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
+            for node in self.nodes.values():
+                node.setSelected(False)
+            for edge in self.edges.values():
+                edge.setSelected(False)
+            self._update_status("Cleared selection")
+            event.accept()
+            return
+        
+        # Delete с Shift - удалить только связи
+        if event.key() == Qt.Key.Key_Delete and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.delete_selected_connections()
+            event.accept()
+            return
+        
+        # Ctrl+Shift+Delete - очистить всё
+        if event.key() == Qt.Key.Key_Delete and event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
+            self.delete_all_blocks()
+            event.accept()
+            return
+        
+        # Escape - снять выделение
+        if event.key() == Qt.Key.Key_Escape:
+            for node in self.nodes.values():
+                node.setSelected(False)
+            for edge in self.edges.values():
+                edge.setSelected(False)
+            self._update_status("Selection cleared")
+            event.accept()
+            return
+        
+        super().keyPressEvent(event)
     def update_nest_states(self):
         dragged_blocks = []
         for node in self.nodes.values():
@@ -1312,45 +1440,93 @@ class CanvasWidget(QGraphicsView):
         except Exception as e:
             print(f"❌ [CANVAS] add_block - ERROR: {e}")
             raise
+    def delete_selected_blocks(self):
+        """Удаляет все выбранные блоки"""
+        selected_items = self.scene.selectedItems()
+        blocks_to_delete = [item for item in selected_items if isinstance(item, GraphNode)]
+        
+        if not blocks_to_delete:
+            return False
+        
+        # Сортируем по глубине (сначала дочерние)
+        def get_depth(node, depth=0):
+            max_depth = depth
+            for child in node.child_nodes:
+                max_depth = max(max_depth, get_depth(child, depth + 1))
+            return max_depth
+        
+        blocks_to_delete.sort(key=lambda n: get_depth(n), reverse=True)
+        
+        deleted_count = 0
+        for node in blocks_to_delete:
+            if self.remove_block(node.block.id):
+                deleted_count += 1
+        
+        if deleted_count > 0:
+            self._update_status(f"✅ Deleted {deleted_count} blocks")
+            self.block_selected.emit(None)
+            # Автосохранение
+            if self.parent_window and hasattr(self.parent_window, 'auto_save_project'):
+                self.parent_window.auto_save_project()
+        
+        return deleted_count > 0
     
     def remove_block(self, block_id):
-        print(f"🗑️ [CANVAS] remove_block - START: block_id={block_id}")
+        """Удаляет блок и все связанные с ним соединения"""
+        print(f"🗑️ [REMOVE BLOCK] Начало: block_id={block_id}")
         
         if block_id in self.nodes:
             node = self.nodes[block_id]
-            print(f"📦 [CANVAS] Block found: {node.block.name}")
+            print(f"📦 [REMOVE BLOCK] Блок найден: name={node.block.name}")
             
             try:
-                if self.parent_window and hasattr(self.parent_window, 'palette'):
-                    self.parent_window.palette.remove_created_block(block_id)
+                # Удаляем все соединения, связанные с этим блоком
+                edges_to_remove = []
+                for edge_id, edge in self.edges.items():
+                    if edge.source == node or edge.destination == node:
+                        edges_to_remove.append(edge_id)
                 
+                print(f"🔗 [REMOVE BLOCK] Удаление {len(edges_to_remove)} соединений")
+                for edge_id in edges_to_remove:
+                    # Удаляем связь из проекта если есть
+                    if self.parent_window and hasattr(self.parent_window, 'project'):
+                        self.parent_window.project.remove_connection(edge_id)
+                    # Удаляем из сцены
+                    edge = self.edges[edge_id]
+                    if edge.source:
+                        edge.source.remove_edge(edge)
+                    if edge.destination:
+                        edge.destination.remove_edge(edge)
+                    self.scene.removeItem(edge)
+                    del self.edges[edge_id]
+                
+                # Удаляем связь с родителем
                 if node.parent_node:
                     node.parent_node.remove_child(node)
                 
+                # Рекурсивно удаляем дочерние блоки
                 for child in node.child_nodes[:]:
                     self.remove_block(child.block.id)
                 
-                edge_ids_to_remove = []
-                for edge_id, edge in self.edges.items():
-                    if edge.source == node or edge.destination == node:
-                        edge_ids_to_remove.append(edge_id)
+                # Удаляем из палитры если это reference блок (пока закомментировано)
+                # if self.parent_window and hasattr(self.parent_window, 'palette'):
+                #     self.parent_window.palette.remove_created_block(block_id)
                 
-                for edge_id in edge_ids_to_remove:
-                    self.scene.removeItem(self.edges[edge_id])
-                    del self.edges[edge_id]
-                
+                # Удаляем блок со сцены
                 self.scene.removeItem(node)
                 del self.nodes[block_id]
                 
-                print(f"✅ [CANVAS] remove_block - SUCCESS")
+                print(f"✅ [REMOVE BLOCK] Блок удален, осталось блоков: {len(self.nodes)}")
                 return True
             except Exception as e:
-                print(f"❌ [CANVAS] remove_block - ERROR: {e}")
+                print(f"❌ [REMOVE BLOCK] Ошибка: {e}")
+                import traceback
+                traceback.print_exc()
                 return False
         else:
-            print(f"⚠️ [CANVAS] Block not found: {block_id}")
+            print(f"⚠️ [REMOVE BLOCK] Блок с id={block_id} не найден")
             return False
-    
+
     def clear(self):
         print(f"🧹 [CANVAS] clear - START. Blocks: {len(self.nodes)}, Connections: {len(self.edges)}")
         self.nodes.clear()
