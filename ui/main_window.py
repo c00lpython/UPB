@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, QDateTime, QUrl
 from PyQt6.QtGui import QKeyEvent
 from ui.browser_widget import BrowserWidget
 from ui.vm_table import VmTable
-from ui.script_editor import ScriptEditor
+from ui.SE.script_editor import ScriptEditor
 from core.project_manager import ProjectManager
 
 import os
