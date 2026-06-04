@@ -6,7 +6,7 @@ from PyQt6.QtGui import *
 
 
 class SearchableComboBox(QComboBox):
-    """ComboBox с фильтрацией по вводимому тексту (БЕЗ автоподстановки)"""
+    """ComboBox с поиском/фильтрацией - показывает только имена переменных, тултип с данными"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -14,7 +14,9 @@ class SearchableComboBox(QComboBox):
         self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.lineEdit().textEdited.connect(self.on_text_edited)
         self.all_items = []
-        self._updating = False  # Флаг для блокировки рекурсии
+        self.filtered_items = []
+        self.variables_data = {}
+        self._updating = False
         self.setStyleSheet("""
             QComboBox {
                 background-color: #3a3a3a;
@@ -23,6 +25,7 @@ class SearchableComboBox(QComboBox):
                 border-radius: 4px;
                 padding: 6px 8px;
                 font-size: 11px;
+                min-width: 180px;
             }
             QComboBox:focus {
                 border: 1px solid #3d5afe;
@@ -31,117 +34,104 @@ class SearchableComboBox(QComboBox):
                 background-color: #3a3a3a;
                 color: #ddd;
                 selection-background-color: #3d5afe;
+                min-width: 300px;
             }
         """)
     
-    def set_items(self, items: list):
-        """Устанавливает список всех переменных"""
-        print(f"📦 [SearchableComboBox] set_items: {len(items)} items")
-        self.all_items = items.copy() if items else []
+    def set_items(self, items: list, variables_data: dict = None):
+        """
+        items: список кортежей (display_text, actual_value)
+        variables_data: словарь с данными переменных для тултипов
+        """
         self._updating = True
         self.clear()
-        if items:
-            self.addItems(items)
+        self.variables_data = variables_data or {}
+        
+        if items and isinstance(items[0], tuple):
+            self.all_items = items.copy()
+            for idx, (display, actual) in enumerate(items):
+                self.addItem(display)
+                if actual in self.variables_data:
+                    data = self.variables_data[actual]
+                    selector = data.get('selector', '')
+                    url = data.get('url', '')
+                    sample = data.get('sample', '')
+                    tooltip = f"📦 Variable: {actual}\n"
+                    if selector:
+                        tooltip += f"🎯 XPath: {selector[:80]}{'...' if len(selector) > 80 else ''}\n"
+                    if url:
+                        tooltip += f"🌐 URL: {url}\n"
+                    if sample:
+                        tooltip += f"📝 Sample: {sample[:60]}{'...' if len(sample) > 60 else ''}"
+                    self.setItemData(idx, tooltip, Qt.ItemDataRole.ToolTipRole)
+        else:
+            self.all_items = [(item, item) for item in items]
+            for display, actual in self.all_items:
+                self.addItem(display)
+        
+        self.filtered_items = self.all_items.copy()
         self._updating = False
+        print(f"📦 [Combo] set_items: {len(self.all_items)} items")
+    
+    def get_actual_value(self) -> str:
+        """Возвращает actual value текущего выбранного элемента"""
+        current_text = self.currentText()
+        for display, actual in self.all_items:
+            if display == current_text:
+                return actual
+        return current_text
     
     def on_text_edited(self, text):
-        """Срабатывает при КАЖДОМ изменении текста (ввод/удаление)"""
         if self._updating:
             return
-        print(f"✏️ [SearchableComboBox] textEdited: '{text}'")
-        self.filter_items(text)
+        self._filter_items(text)
     
-    def filter_items(self, text):
-        """Фильтрует список по введённому тексту (startswith)"""
-        if self._updating:
-            return
-            
-        print(f"🔍 [SearchableComboBox] filter_items: text='{text}'")
-        
-        if not self.all_items:
+    def _filter_items(self, text):
+        if self._updating or not self.all_items:
             return
         
-        # Блокируем сигналы при обновлении списка
         self._updating = True
-        
-        # Сохраняем текущий текст
         current_text = self.lineEdit().text()
         
         self.clear()
         
         if not text:
-            self.addItems(self.all_items)
+            self.filtered_items = self.all_items.copy()
         else:
-            filtered = [item for item in self.all_items if item.lower().startswith(text.lower())]
-            if filtered:
-                self.addItems(filtered)
+            self.filtered_items = [(d, a) for d, a in self.all_items if d.lower().startswith(text.lower())]
         
-        # Восстанавливаем текст (на случай, если он сбросился)
+        for idx, (display, actual) in enumerate(self.filtered_items):
+            self.addItem(display)
+            if actual in self.variables_data:
+                data = self.variables_data[actual]
+                selector = data.get('selector', '')
+                url = data.get('url', '')
+                sample = data.get('sample', '')
+                tooltip = f"📦 Variable: {actual}\n"
+                if selector:
+                    tooltip += f"🎯 XPath: {selector[:80]}{'...' if len(selector) > 80 else ''}\n"
+                if url:
+                    tooltip += f"🌐 URL: {url}\n"
+                if sample:
+                    tooltip += f"📝 Sample: {sample[:60]}{'...' if len(sample) > 60 else ''}"
+                self.setItemData(idx, tooltip, Qt.ItemDataRole.ToolTipRole)
+        
         if self.lineEdit().text() != current_text:
             self.lineEdit().setText(current_text)
         
         self._updating = False
     
     def showPopup(self):
-        """Показывает выпадающий список"""
-        print(f"🔽 [SearchableComboBox] showPopup, items count: {self.count()}")
         if self.count() > 0:
             super().showPopup()
     
-    def hidePopup(self):
-        """Скрывает выпадающий список"""
-        print(f"🔼 [SearchableComboBox] hidePopup")
-        super().hidePopup()
-    
-    def focusInEvent(self, event):
-        """При получении фокуса"""
-        print(f"🎯 [SearchableComboBox] focusInEvent")
-        super().focusInEvent(event)
-    
     def focusOutEvent(self, event):
-        """При потере фокуса"""
-        print(f"💤 [SearchableComboBox] focusOutEvent, text: '{self.lineEdit().text()}'")
         super().focusOutEvent(event)
-    
-    def keyPressEvent(self, event):
-        """Обработка нажатий клавиш"""
-        key = event.key()
-        key_name = {
-            Qt.Key.Key_Backspace: "Backspace",
-            Qt.Key.Key_Delete: "Delete",
-            Qt.Key.Key_Left: "Left",
-            Qt.Key.Key_Right: "Right",
-            Qt.Key.Key_Up: "Up",
-            Qt.Key.Key_Down: "Down",
-            Qt.Key.Key_Return: "Enter",
-            Qt.Key.Key_Enter: "Enter",
-            Qt.Key.Key_Tab: "Tab",
-            Qt.Key.Key_Escape: "Escape",
-        }.get(key, f"Key_{key}")
-        
-        print(f"⌨️ [SearchableComboBox] keyPressEvent: {key_name}")
-        
-        if self._updating:
-            super().keyPressEvent(event)
-            return
-        
-        if key == Qt.Key.Key_Up:
-            print(f"   ⬆️ moving up")
-        elif key == Qt.Key.Key_Down:
-            print(f"   ⬇️ moving down")
-        elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
-            print(f"   ✅ Enter pressed, current text: '{self.currentText()}'")
-        elif key == Qt.Key.Key_Tab:
-            print(f"   ⇆ Tab pressed")
-        elif key == Qt.Key.Key_Backspace:
-            print(f"   ⌫ Backspace")
-        
-        super().keyPressEvent(event)
+
 
 class PropertiesEditor(QWidget):
-    """Редактор свойств выбранного блока с поддержкой переменных"""
     
-    property_changed = pyqtSignal(int, str, object)  # block_id, prop_name, value
+    property_changed = pyqtSignal(int, str, object)
     
     def __init__(self, get_variables_callback=None, parent=None):
         super().__init__(parent)
@@ -154,7 +144,6 @@ class PropertiesEditor(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Заголовок
         self.header = QLabel("📝 PROPERTIES")
         self.header.setFixedHeight(40)
         self.header.setStyleSheet("""
@@ -169,7 +158,6 @@ class PropertiesEditor(QWidget):
         """)
         layout.addWidget(self.header)
         
-        # Scroll area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("""
@@ -197,7 +185,6 @@ class PropertiesEditor(QWidget):
         scroll.setWidget(self.container)
         layout.addWidget(scroll)
         
-        # Инфо панель внизу
         info_panel = QWidget()
         info_panel.setFixedHeight(50)
         info_panel.setStyleSheet("background: #2d2d2d; border-top: 1px solid #444;")
@@ -211,28 +198,108 @@ class PropertiesEditor(QWidget):
         
         layout.addWidget(info_panel)
     
-    def get_variable_names(self) -> list:
-        """Возвращает список имён переменных"""
-        if self.get_variables_callback:
-            variables = self.get_variables_callback()
-            if variables:
-                return list(variables.keys())
-        return []
+    def _get_filter_type_by_key(self, key: str) -> str:
+        """
+        Определяет тип фильтрации по имени поля (регистронезависимо)
+        """
+        key_lower = key.lower()
+        
+        if "url" in key_lower:
+            return "url"
+        
+        if any(x in key_lower for x in ["selector", "xpath", "css", "var"]):
+            return "selector"
+        
+        return "all"
     
-    def get_variable_value(self, var_name: str) -> dict:
-        """Возвращает значение переменной по имени"""
-        if self.get_variables_callback:
-            variables = self.get_variables_callback()
-            return variables.get(var_name, {})
-        return {}
+    def _get_placeholder_by_key(self, key: str) -> str:
+        """Возвращает placeholder в зависимости от поля"""
+        key_lower = key.lower()
+        
+        if "url" in key_lower:
+            return "Type URL or select unique URL variable..."
+        if any(x in key_lower for x in ["selector", "xpath", "css", "var"]):
+            return "Type XPath/CSS or select variable..."
+        return "Type value or select variable..."
+    
+    def get_unique_urls(self) -> list:
+        """
+        Возвращает список уникальных URL из переменных
+        Возвращает список кортежей (display_text, actual_value)
+        display_text = сокращённый URL (первые 60 символов)
+        actual_value = имя переменной (для сохранения в params)
+        """
+        print(f"🔍 [UNIQUE_URLS] START")
+        
+        if not self.get_variables_callback:
+            return []
+        
+        variables = self.get_variables_callback()
+        if not variables:
+            return []
+        
+        filtered = []
+        seen_urls = set()
+        
+        for name, data in variables.items():
+            url_val = data.get('url', '').strip()
+            
+            if url_val and url_val not in seen_urls:
+                seen_urls.add(url_val)
+                
+                # Обрезаем URL для отображения (первые 60 символов)
+                if len(url_val) > 60:
+                    display_url = url_val[:57] + "..."
+                else:
+                    display_url = url_val
+                
+                filtered.append((display_url, name))
+                print(f"   ✅ {display_url} → {name}")
+            elif url_val:
+                print(f"   ⚠️ {name} (duplicate URL) - SKIPPED")
+            else:
+                print(f"   ❌ {name} (no URL)")
+        
+        print(f"🎯 [UNIQUE_URLS] result: {len(filtered)} unique URLs")
+        return filtered
+
+    def get_filtered_variables(self, filter_type: str) -> list:
+        """
+        Возвращает список кортежей (display_text, actual_value) для дроплиста
+        filter_type: 'selector', 'all'
+        """
+        print(f"🔍 [FILTER] filter_type={filter_type}")
+        
+        if not self.get_variables_callback:
+            return []
+        
+        variables = self.get_variables_callback()
+        if not variables:
+            return []
+        
+        filtered = []
+        
+        for name, data in variables.items():
+            selector_val = data.get('selector', '').strip()
+            
+            if filter_type == "selector":
+                if selector_val:
+                    filtered.append((name, name))
+                    print(f"   ✅ {name} (has selector)")
+                else:
+                    print(f"   ❌ {name} (no selector)")
+            else:  # all
+                filtered.append((name, name))
+                print(f"   ✅ {name} (all mode)")
+        
+        print(f"🎯 [FILTER] result: {len(filtered)} items")
+        return filtered
     
     def set_block(self, block):
-        """Устанавливает блок для редактирования"""
         self.current_block = block
         self.refresh()
     
     def refresh(self):
-        """Обновляет UI на основе текущего блока"""
         self.clear()
         
         if not self.current_block:
@@ -244,8 +311,6 @@ class PropertiesEditor(QWidget):
         self.info_label.setText(f"Editing: {self.current_block.name} (ID: {self.current_block.id})")
         
         params = self.current_block.params
-        
-        # Группировка свойств по категориям
         categories = self.get_categories(self.current_block.node_type)
         
         for category, props in categories.items():
@@ -255,55 +320,25 @@ class PropertiesEditor(QWidget):
                     self.add_property_row(key, params[key])
     
     def get_categories(self, node_type: str) -> dict:
-        """Возвращает группировку свойств по категориям"""
         categories = {
-            "startofwork": {
-                "⚙️ Basic": ["projectName", "headless", "timeout"]
-            },
-            "openurl": {
-                "🌐 Navigation": ["url", "waitStrategy", "timeout"]
-            },
-            "click": {
-                "🖱️ Interaction": ["selector", "selectorType", "clickCount", "waitAfter"]
-            },
-            "type": {
-                "⌨️ Input": ["selector", "selectorType", "text", "clearFirst", "pressEnter", "delay"]
-            },
-            "parsedata": {
-                "📊 Extraction": ["varName", "saveTo", "extractType", "attributeName"]
-            },
-            "screenshot": {
-                "📸 Capture": ["filename", "fullPage", "selector"]
-            },
-            "convertexcel": {
-                "📑 Conversion": ["inputFile", "outputFormat", "outputFile", "sheetName"]
-            },
-            "forloop": {
-                "🔄 Loop": ["iterator", "iterableType", "iterable"]
-            },
-            "if": {
-                "⚡ Condition": ["left", "operator", "right"]
-            },
-            "end": {
-                "⏹️ Close": ["blockType"]
-            },
-            "reload": {
-                "🔄 Page": ["waitAfter", "ignoreCache"]
-            },
-            "sendtelegram": {
-                "📨 Telegram": ["botToken", "chatId", "message", "parseMode"]
-            },
-            "savedata": {
-                "💾 Output": ["dataVar", "format", "outputPath", "overwrite"]
-            },
-            "endsession": {
-                "🏁 Finish": ["saveResults", "closeBrowser", "exportReport"]
-            }
+            "startofwork": {"⚙️ Basic": ["projectName", "headless", "timeout"]},
+            "openurl": {"🌐 Navigation": ["url", "waitStrategy", "timeout"]},
+            "click": {"🖱️ Interaction": ["selector", "selectorType", "clickCount", "waitAfter", "waitForNavigation"]},
+            "type": {"⌨️ Input": ["selector", "selectorType", "text", "clearFirst", "pressEnter", "delay"]},
+            "parsedata": {"📊 Extraction": ["varName", "saveTo", "extractType", "attributeName"]},
+            "screenshot": {"📸 Capture": ["filename", "fullPage", "selector"]},
+            "convertexcel": {"📑 Conversion": ["inputFile", "outputFormat", "outputFile", "sheetName"]},
+            "forloop": {"🔄 Loop": ["iterator", "iterableType", "iterable"]},
+            "if": {"⚡ Condition": ["left", "operator", "right"]},
+            "end": {"⏹️ Close": ["blockType"]},
+            "reload": {"🔄 Page": ["waitAfter", "ignoreCache"]},
+            "sendtelegram": {"📨 Telegram": ["botToken", "chatId", "message", "parseMode"]},
+            "savedata": {"💾 Output": ["dataVar", "format", "outputPath", "overwrite"]},
+            "endsession": {"🏁 Finish": ["saveResults", "closeBrowser", "exportReport"]}
         }
         return categories.get(node_type, {"📦 Properties": list(self.current_block.params.keys()) if self.current_block else []})
     
     def add_category_header(self, title: str):
-        """Добавляет заголовок категории"""
         label = QLabel(title)
         label.setStyleSheet("""
             QLabel {
@@ -318,31 +353,26 @@ class PropertiesEditor(QWidget):
         self.container_layout.insertWidget(self.container_layout.count() - 1, label)
     
     def clear(self):
-        """Очищает все поля"""
         while self.container_layout.count() > 1:
             item = self.container_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
     
     def add_property_row(self, key: str, value):
-        """Добавляет строку редактирования свойства"""
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(12)
         
-        # Метка
         label = QLabel(self.format_key(key))
         label.setFixedWidth(110)
         label.setStyleSheet("color: #ccc; font-size: 11px; font-weight: 500;")
         label.setWordWrap(True)
         layout.addWidget(label)
         
-        # Редактор (может быть с дроплистом переменных)
         editor = self.create_editor(key, value)
         layout.addWidget(editor, 1)
         
-        # Иконка типа
         type_icon = self.get_type_icon(value)
         if type_icon:
             icon_label = QLabel(type_icon)
@@ -352,12 +382,8 @@ class PropertiesEditor(QWidget):
         self.container_layout.insertWidget(self.container_layout.count() - 1, widget)
     
     def create_editor(self, key: str, value):
-        """Создает виджет редактирования в зависимости от типа и ключа"""
-        
-        # Поля, которые должны иметь дроплист переменных
         variable_fields = ["url", "selector", "varName", "iterable", "left", "right", "dataVar"]
         
-        # Boolean
         if isinstance(value, bool):
             editor = QCheckBox()
             editor.setChecked(value)
@@ -377,7 +403,6 @@ class PropertiesEditor(QWidget):
             """)
             return editor
         
-        # Number (int/float)
         if isinstance(value, int):
             editor = QSpinBox()
             editor.setRange(-999999, 999999)
@@ -395,32 +420,51 @@ class PropertiesEditor(QWidget):
             self.style_editor(editor)
             return editor
         
-        # Поля с дроплистом переменных (поиск по началу строки)
-        if key in variable_fields:
+        if key in variable_fields and self.current_block:
             editor = SearchableComboBox()
-            variable_names = self.get_variable_names()
-            if variable_names:
-                editor.set_items(variable_names)
-            # Устанавливаем текущее значение
-            current_text = str(value) if value else ""
-            editor.setCurrentText(current_text)
-            editor.currentTextChanged.connect(lambda v, k=key: self.on_change(k, v))
-            editor.lineEdit().setPlaceholderText("Type value or select variable...")
+            filter_type = self._get_filter_type_by_key(key)
+            variables_data = self.get_variables_callback() if self.get_variables_callback else {}
+            
+            # Для URL полей используем get_unique_urls
+            if filter_type == "url":
+                filtered_vars = self.get_unique_urls()
+                print(f"🔍 [EDITOR] key={key}, using UNIQUE_URLS, got {len(filtered_vars)} items")
+            else:
+                filtered_vars = self.get_filtered_variables(filter_type)
+                print(f"🔍 [EDITOR] key={key}, filter_type={filter_type}, got {len(filtered_vars)} items")
+            
+            if filtered_vars:
+                editor.set_items(filtered_vars, variables_data)
+            else:
+                print(f"⚠️ [EDITOR] No variables for key={key}")
+            
+            current_value = str(value) if value else ""
+            for display, actual in filtered_vars:
+                if actual == current_value:
+                    editor.setCurrentText(display)
+                    break
+            else:
+                editor.setCurrentText(current_value)
+            
+            editor.currentTextChanged.connect(lambda v, k=key: self.on_combo_change(k, v, editor))
+            editor.lineEdit().setPlaceholderText(self._get_placeholder_by_key(key))
             return editor
         
-        # Dropdown поля (фиксированные опции)
         if key in ["waitStrategy", "selectorType", "iterableType", "operator", "blockType", "parseMode", "outputFormat", "format", "extractType"]:
             editor = self.create_dropdown(key, value)
             return editor
         
-        # Обычное текстовое поле
         editor = QLineEdit(str(value))
         editor.textChanged.connect(lambda v, k=key: self.on_change(k, v))
         self.style_editor(editor)
         return editor
     
+    def on_combo_change(self, key: str, display_text: str, combo: SearchableComboBox):
+        """Обработчик изменения комбобокса - извлекаем actual value"""
+        actual_value = combo.get_actual_value()
+        self.on_change(key, actual_value)
+    
     def create_dropdown(self, key: str, current_value) -> QComboBox:
-        """Создает выпадающий список с фиксированными опциями"""
         options = {
             "waitStrategy": ["domcontentloaded", "load", "networkidle"],
             "selectorType": ["css", "xpath"],
@@ -443,7 +487,6 @@ class PropertiesEditor(QWidget):
         return editor
     
     def style_editor(self, widget):
-        """Применяет единый стиль к редактору"""
         widget.setStyleSheet("""
             QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
                 background-color: #3a3a3a;
@@ -473,7 +516,6 @@ class PropertiesEditor(QWidget):
         """)
     
     def get_type_icon(self, value) -> str:
-        """Возвращает иконку типа значения"""
         if isinstance(value, bool):
             return "✓/✗"
         if isinstance(value, int):
@@ -489,13 +531,11 @@ class PropertiesEditor(QWidget):
         return ""
     
     def on_change(self, key: str, value):
-        """Обработчик изменения значения"""
         if self.current_block:
             self.current_block.params[key] = value
             self.property_changed.emit(self.current_block.id, key, value)
     
     def format_key(self, key: str) -> str:
-        """Форматирует имя свойства для отображения"""
         names = {
             "projectName": "Project Name",
             "headless": "Headless Mode",
@@ -506,6 +546,7 @@ class PropertiesEditor(QWidget):
             "selectorType": "Selector Type",
             "clickCount": "Click Count",
             "waitAfter": "Wait After (ms)",
+            "waitForNavigation": "Wait for Navigation",
             "text": "Text",
             "clearFirst": "Clear First",
             "pressEnter": "Press Enter",

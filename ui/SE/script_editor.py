@@ -153,7 +153,7 @@ class ScriptEditor(QWidget):
     # ========================================================================
     
     def get_variables(self) -> dict:
-        """Возвращает словарь переменных для Properties Editor"""
+        print(f"🔙 [CALLBACK] get_variables called, returning {len(self.variables)} vars: {list(self.variables.keys())[:5]}")
         return self.variables
     
     def load_variables_from_project(self, project_name: str):
