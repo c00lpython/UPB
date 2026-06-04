@@ -17,8 +17,10 @@ class ScriptEditor(QWidget):
     def __init__(self, project_manager=None, parent=None):
         super().__init__(parent)
         self.project_manager = project_manager
-        self.current_project = None  # Добавлено для отслеживания текущего проекта
+        self.current_project = None
         self.current_workflow_file = None
+        self.variables = {}  # Хранилище переменных из variables.xlsx
+        
         self.init_ui()
     
     def init_ui(self):
@@ -51,7 +53,7 @@ class ScriptEditor(QWidget):
         right_widget.setMinimumWidth(280)
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        self.properties = PropertiesEditor()
+        self.properties = PropertiesEditor(get_variables_callback=self.get_variables)
         self.properties.property_changed.connect(self.on_property_changed)
         right_layout.addWidget(self.properties)
         main_splitter.addWidget(right_widget)
@@ -146,6 +148,63 @@ class ScriptEditor(QWidget):
         block_count = len(self.canvas.get_all_blocks())
         self.block_count_label.setText(f"{block_count} blocks")
     
+    # ========================================================================
+    # Управление переменными
+    # ========================================================================
+    
+    def get_variables(self) -> dict:
+        """Возвращает словарь переменных для Properties Editor"""
+        return self.variables
+    
+    def load_variables_from_project(self, project_name: str):
+        """Загружает переменные из variables.xlsx текущего проекта"""
+        if not self.project_manager:
+            self.variables = {}
+            return
+        
+        project_path = os.path.join(self.project_manager.projects_dir, project_name)
+        variables_file = os.path.join(project_path, "variables.xlsx")
+        
+        if os.path.exists(variables_file):
+            try:
+                import pandas as pd
+                df = pd.read_excel(variables_file)
+                self.variables = {}
+                
+                for _, row in df.iterrows():
+                    name = row.get('Name')
+                    if name and not pd.isna(name):
+                        name_str = str(name).strip()
+                        self.variables[name_str] = {
+                            'selector': str(row.get('XPath/CSS', '')) if not pd.isna(row.get('XPath/CSS', '')) else '',
+                            'url': str(row.get('URL', '')) if not pd.isna(row.get('URL', '')) else '',
+                            'type': str(row.get('Type', 'Static')) if not pd.isna(row.get('Type', 'Static')) else 'Static',
+                            'sample': str(row.get('Sample Text', '')) if not pd.isna(row.get('Sample Text', '')) else ''
+                        }
+                
+                self.update_status(f"📦 Loaded {len(self.variables)} variables from variables.xlsx")
+                print(f"✅ Загружено {len(self.variables)} переменных из {variables_file}")
+                
+                # Обновляем Properties Editor (если открыт блок с переменными)
+                if self.properties.current_block:
+                    self.properties.refresh()
+                    
+            except ImportError:
+                self.update_status("⚠️ pandas not installed. Run: pip install pandas openpyxl", True)
+                print("⚠️ pandas not installed. Run: pip install pandas openpyxl")
+                self.variables = {}
+            except Exception as e:
+                self.update_status(f"⚠️ Error loading variables: {e}", True)
+                print(f"⚠️ Ошибка загрузки переменных: {e}")
+                self.variables = {}
+        else:
+            self.variables = {}
+            print(f"⚠️ Файл variables.xlsx не найден в {project_path}")
+    
+    # ========================================================================
+    # Компиляция
+    # ========================================================================
+    
     def compile_workflow(self):
         nodes = self.canvas.get_all_blocks()
         if not nodes:
@@ -186,6 +245,15 @@ class ScriptEditor(QWidget):
                 lines.append(f"# {edge.source.block.name} → {edge.destination.block.name}")
             lines.append("")
         
+        # Добавляем секцию переменных
+        if self.variables:
+            lines.append("# ============================================")
+            lines.append("# Variables (from variables.xlsx)")
+            lines.append("# ============================================")
+            for var_name, var_data in self.variables.items():
+                lines.append(f"# {var_name} = {var_data.get('selector', '')[:60]}...")
+            lines.append("")
+        
         if self.project_manager and self.project_manager.current_project:
             project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
             script_path = os.path.join(project_path, "script.txt")
@@ -203,10 +271,10 @@ class ScriptEditor(QWidget):
             "startofwork": f"start_session project={p.get('projectName', '')} headless={p.get('headless', True)} timeout={p.get('timeout', 30)}",
             "openurl": f"open_url url={p.get('url', '')} wait={p.get('waitStrategy', 'load')} timeout={p.get('timeout', 30000)}",
             "click": f"click selector={p.get('selector', '')} type={p.get('selectorType', 'css')} count={p.get('clickCount', 1)} wait={p.get('waitAfter', 1000)}",
-            "type": f"type selector={p.get('selector', '')} type={p.get('selectorType', 'css')} text='{p.get('text', '')}' clear={p.get('clearFirst', True)} enter={p.get('pressEnter', False)}",
-            "parsedata": f"parse_data var={p.get('varName', '')} save_to={p.get('saveTo', 'result')} extract={p.get('extractType', 'text')}",
-            "screenshot": f"screenshot filename={p.get('filename', 'screenshot.png')} full={p.get('fullPage', False)}",
-            "convertexcel": f"convert_excel input={p.get('inputFile', '')} format={p.get('outputFormat', 'csv')} sheet={p.get('sheetName', 'Sheet1')}",
+            "type": f"type selector={p.get('selector', '')} type={p.get('selectorType', 'css')} text='{p.get('text', '')}' clear={p.get('clearFirst', True)} enter={p.get('pressEnter', False)} delay={p.get('delay', 0)}",
+            "parsedata": f"parse_data var={p.get('varName', '')} save_to={p.get('saveTo', 'result')} extract={p.get('extractType', 'text')} attribute={p.get('attributeName', '')}",
+            "screenshot": f"screenshot filename={p.get('filename', 'screenshot.png')} full={p.get('fullPage', False)} selector={p.get('selector', '')}",
+            "convertexcel": f"convert_excel input={p.get('inputFile', '')} format={p.get('outputFormat', 'csv')} output={p.get('outputFile', '')} sheet={p.get('sheetName', 'Sheet1')}",
             "forloop": f"for iterator={p.get('iterator', 'item')} type={p.get('iterableType', 'variable')} in {p.get('iterable', '')}",
             "if": f"if {p.get('left', '')} {p.get('operator', 'eq')} {p.get('right', '')}",
             "end": f"end type={p.get('blockType', 'loop')}",
@@ -216,6 +284,10 @@ class ScriptEditor(QWidget):
             "endsession": f"end_session save={p.get('saveResults', True)} close={p.get('closeBrowser', True)} report={p.get('exportReport', False)}"
         }
         return commands.get(block.node_type, f"# TODO: implement {block.node_type}")
+    
+    # ========================================================================
+    # Управление канвасом
+    # ========================================================================
     
     def clear_canvas(self):
         if len(self.canvas.get_all_blocks()) > 0:
@@ -298,6 +370,10 @@ class ScriptEditor(QWidget):
             upb_serializer.save_project(self.canvas, workflow_file)
             # Не выводим уведомление при автосохранении
     
+    # ========================================================================
+    # Управление проектом
+    # ========================================================================
+    
     def update_project(self, project_name: str):
         """
         Обновляет проект при переключении между проектами
@@ -314,6 +390,9 @@ class ScriptEditor(QWidget):
         self.current_project = project_name
         
         if project_name and self.project_manager:
+            # Загружаем переменные из variables.xlsx
+            self.load_variables_from_project(project_name)
+            
             project_path = os.path.join(self.project_manager.projects_dir, project_name)
             workflow_file = os.path.join(project_path, "workflow.json")
             

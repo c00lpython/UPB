@@ -1,16 +1,152 @@
+# ui/SE/ui/properties_editor.py
+
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 
 
+class SearchableComboBox(QComboBox):
+    """ComboBox с фильтрацией по вводимому тексту (БЕЗ автоподстановки)"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.lineEdit().textEdited.connect(self.on_text_edited)
+        self.all_items = []
+        self._updating = False  # Флаг для блокировки рекурсии
+        self.setStyleSheet("""
+            QComboBox {
+                background-color: #3a3a3a;
+                color: #ddd;
+                border: 1px solid #555;
+                border-radius: 4px;
+                padding: 6px 8px;
+                font-size: 11px;
+            }
+            QComboBox:focus {
+                border: 1px solid #3d5afe;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #3a3a3a;
+                color: #ddd;
+                selection-background-color: #3d5afe;
+            }
+        """)
+    
+    def set_items(self, items: list):
+        """Устанавливает список всех переменных"""
+        print(f"📦 [SearchableComboBox] set_items: {len(items)} items")
+        self.all_items = items.copy() if items else []
+        self._updating = True
+        self.clear()
+        if items:
+            self.addItems(items)
+        self._updating = False
+    
+    def on_text_edited(self, text):
+        """Срабатывает при КАЖДОМ изменении текста (ввод/удаление)"""
+        if self._updating:
+            return
+        print(f"✏️ [SearchableComboBox] textEdited: '{text}'")
+        self.filter_items(text)
+    
+    def filter_items(self, text):
+        """Фильтрует список по введённому тексту (startswith)"""
+        if self._updating:
+            return
+            
+        print(f"🔍 [SearchableComboBox] filter_items: text='{text}'")
+        
+        if not self.all_items:
+            return
+        
+        # Блокируем сигналы при обновлении списка
+        self._updating = True
+        
+        # Сохраняем текущий текст
+        current_text = self.lineEdit().text()
+        
+        self.clear()
+        
+        if not text:
+            self.addItems(self.all_items)
+        else:
+            filtered = [item for item in self.all_items if item.lower().startswith(text.lower())]
+            if filtered:
+                self.addItems(filtered)
+        
+        # Восстанавливаем текст (на случай, если он сбросился)
+        if self.lineEdit().text() != current_text:
+            self.lineEdit().setText(current_text)
+        
+        self._updating = False
+    
+    def showPopup(self):
+        """Показывает выпадающий список"""
+        print(f"🔽 [SearchableComboBox] showPopup, items count: {self.count()}")
+        if self.count() > 0:
+            super().showPopup()
+    
+    def hidePopup(self):
+        """Скрывает выпадающий список"""
+        print(f"🔼 [SearchableComboBox] hidePopup")
+        super().hidePopup()
+    
+    def focusInEvent(self, event):
+        """При получении фокуса"""
+        print(f"🎯 [SearchableComboBox] focusInEvent")
+        super().focusInEvent(event)
+    
+    def focusOutEvent(self, event):
+        """При потере фокуса"""
+        print(f"💤 [SearchableComboBox] focusOutEvent, text: '{self.lineEdit().text()}'")
+        super().focusOutEvent(event)
+    
+    def keyPressEvent(self, event):
+        """Обработка нажатий клавиш"""
+        key = event.key()
+        key_name = {
+            Qt.Key.Key_Backspace: "Backspace",
+            Qt.Key.Key_Delete: "Delete",
+            Qt.Key.Key_Left: "Left",
+            Qt.Key.Key_Right: "Right",
+            Qt.Key.Key_Up: "Up",
+            Qt.Key.Key_Down: "Down",
+            Qt.Key.Key_Return: "Enter",
+            Qt.Key.Key_Enter: "Enter",
+            Qt.Key.Key_Tab: "Tab",
+            Qt.Key.Key_Escape: "Escape",
+        }.get(key, f"Key_{key}")
+        
+        print(f"⌨️ [SearchableComboBox] keyPressEvent: {key_name}")
+        
+        if self._updating:
+            super().keyPressEvent(event)
+            return
+        
+        if key == Qt.Key.Key_Up:
+            print(f"   ⬆️ moving up")
+        elif key == Qt.Key.Key_Down:
+            print(f"   ⬇️ moving down")
+        elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
+            print(f"   ✅ Enter pressed, current text: '{self.currentText()}'")
+        elif key == Qt.Key.Key_Tab:
+            print(f"   ⇆ Tab pressed")
+        elif key == Qt.Key.Key_Backspace:
+            print(f"   ⌫ Backspace")
+        
+        super().keyPressEvent(event)
+
 class PropertiesEditor(QWidget):
-    """Редактор свойств выбранного блока"""
+    """Редактор свойств выбранного блока с поддержкой переменных"""
     
     property_changed = pyqtSignal(int, str, object)  # block_id, prop_name, value
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self, get_variables_callback=None, parent=None):
+        super().__init__(parent)
         self.current_block = None
+        self.get_variables_callback = get_variables_callback
         self.setup_ui()
     
     def setup_ui(self):
@@ -75,6 +211,21 @@ class PropertiesEditor(QWidget):
         
         layout.addWidget(info_panel)
     
+    def get_variable_names(self) -> list:
+        """Возвращает список имён переменных"""
+        if self.get_variables_callback:
+            variables = self.get_variables_callback()
+            if variables:
+                return list(variables.keys())
+        return []
+    
+    def get_variable_value(self, var_name: str) -> dict:
+        """Возвращает значение переменной по имени"""
+        if self.get_variables_callback:
+            variables = self.get_variables_callback()
+            return variables.get(var_name, {})
+        return {}
+    
     def set_block(self, block):
         """Устанавливает блок для редактирования"""
         self.current_block = block
@@ -90,7 +241,7 @@ class PropertiesEditor(QWidget):
             return
         
         self.header.setText(f"📝 PROPERTIES - {self.current_block.name}")
-        self.info_label.setText(f"Editing: {self.current_block.name} (ID: {self.current_block.id})")  # <-- ИСПРАВЛЕНО
+        self.info_label.setText(f"Editing: {self.current_block.name} (ID: {self.current_block.id})")
         
         params = self.current_block.params
         
@@ -104,7 +255,7 @@ class PropertiesEditor(QWidget):
                     self.add_property_row(key, params[key])
     
     def get_categories(self, node_type: str) -> dict:
-        """Возвращает группировку свойств по категориям для каждого типа ноды"""
+        """Возвращает группировку свойств по категориям"""
         categories = {
             "startofwork": {
                 "⚙️ Basic": ["projectName", "headless", "timeout"]
@@ -116,7 +267,7 @@ class PropertiesEditor(QWidget):
                 "🖱️ Interaction": ["selector", "selectorType", "clickCount", "waitAfter"]
             },
             "type": {
-                "⌨️ Input": ["selector", "selectorType", "text", "clearFirst", "pressEnter"]
+                "⌨️ Input": ["selector", "selectorType", "text", "clearFirst", "pressEnter", "delay"]
             },
             "parsedata": {
                 "📊 Extraction": ["varName", "saveTo", "extractType", "attributeName"]
@@ -187,7 +338,7 @@ class PropertiesEditor(QWidget):
         label.setWordWrap(True)
         layout.addWidget(label)
         
-        # Редактор
+        # Редактор (может быть с дроплистом переменных)
         editor = self.create_editor(key, value)
         layout.addWidget(editor, 1)
         
@@ -202,6 +353,10 @@ class PropertiesEditor(QWidget):
     
     def create_editor(self, key: str, value):
         """Создает виджет редактирования в зависимости от типа и ключа"""
+        
+        # Поля, которые должны иметь дроплист переменных
+        variable_fields = ["url", "selector", "varName", "iterable", "left", "right", "dataVar"]
+        
         # Boolean
         if isinstance(value, bool):
             editor = QCheckBox()
@@ -240,39 +395,32 @@ class PropertiesEditor(QWidget):
             self.style_editor(editor)
             return editor
         
-        # String with options (dropdown)
+        # Поля с дроплистом переменных (поиск по началу строки)
+        if key in variable_fields:
+            editor = SearchableComboBox()
+            variable_names = self.get_variable_names()
+            if variable_names:
+                editor.set_items(variable_names)
+            # Устанавливаем текущее значение
+            current_text = str(value) if value else ""
+            editor.setCurrentText(current_text)
+            editor.currentTextChanged.connect(lambda v, k=key: self.on_change(k, v))
+            editor.lineEdit().setPlaceholderText("Type value or select variable...")
+            return editor
+        
+        # Dropdown поля (фиксированные опции)
         if key in ["waitStrategy", "selectorType", "iterableType", "operator", "blockType", "parseMode", "outputFormat", "format", "extractType"]:
             editor = self.create_dropdown(key, value)
             return editor
         
-        # URL field (with suggestions)
-        if key == "url":
-            editor = QComboBox()
-            editor.setEditable(True)
-            editor.addItems(["https://", "http://", "{{", "}}"])
-            editor.setCurrentText(str(value))
-            editor.currentTextChanged.connect(lambda v, k=key: self.on_change(k, v))
-            self.style_editor(editor)
-            return editor
-        
-        # Selector field (with variable suggestions)
-        if "selector" in key or key == "varName":
-            editor = QComboBox()
-            editor.setEditable(True)
-            editor.addItems(["css=", "xpath=", "{{", "}}"])
-            editor.setCurrentText(str(value))
-            editor.currentTextChanged.connect(lambda v, k=key: self.on_change(k, v))
-            self.style_editor(editor)
-            return editor
-        
-        # Default string
+        # Обычное текстовое поле
         editor = QLineEdit(str(value))
         editor.textChanged.connect(lambda v, k=key: self.on_change(k, v))
         self.style_editor(editor)
         return editor
     
     def create_dropdown(self, key: str, current_value) -> QComboBox:
-        """Создает выпадающий список"""
+        """Создает выпадающий список с фиксированными опциями"""
         options = {
             "waitStrategy": ["domcontentloaded", "load", "networkidle"],
             "selectorType": ["css", "xpath"],
@@ -286,8 +434,10 @@ class PropertiesEditor(QWidget):
         }
         
         editor = QComboBox()
-        editor.addItems(options.get(key, []))
-        editor.setCurrentText(str(current_value))
+        items = options.get(key, [])
+        editor.addItems(items)
+        current = str(current_value) if current_value else items[0] if items else ""
+        editor.setCurrentText(current)
         editor.currentTextChanged.connect(lambda v, k=key: self.on_change(k, v))
         self.style_editor(editor)
         return editor
@@ -342,7 +492,7 @@ class PropertiesEditor(QWidget):
         """Обработчик изменения значения"""
         if self.current_block:
             self.current_block.params[key] = value
-            self.property_changed.emit(self.current_block.id, key, value)  # <-- ИСПРАВЛЕНО
+            self.property_changed.emit(self.current_block.id, key, value)
     
     def format_key(self, key: str) -> str:
         """Форматирует имя свойства для отображения"""
@@ -359,6 +509,7 @@ class PropertiesEditor(QWidget):
             "text": "Text",
             "clearFirst": "Clear First",
             "pressEnter": "Press Enter",
+            "delay": "Delay (ms)",
             "varName": "Variable Name",
             "saveTo": "Save To",
             "extractType": "Extract Type",
