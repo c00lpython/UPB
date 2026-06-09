@@ -1,5 +1,3 @@
-# ui/SE/core/models.py
-
 import uuid
 
 
@@ -69,7 +67,9 @@ class Block:
             "if": {
                 "left": "", 
                 "operator": "eq", 
-                "right": ""
+                "right": "",
+                "true_next": "",
+                "false_next": ""
             },
             "end": {
                 "blockType": "loop"
@@ -108,3 +108,42 @@ class Connection:
         self.to_port = to_port
         self.data_type = data_type
         self.created_at = None
+
+
+class IfBlock(Block):
+    """Блок условия с двумя ветвями: true и false"""
+    
+    def __init__(self, block_id: int, name: str, x: float, y: float):
+        super().__init__(
+            block_id=block_id,
+            node_type="if",
+            name=name,
+            x=x,
+            y=y,
+            color="#e74c3c"
+        )
+        self.true_branch_id = None
+        self.false_branch_id = None
+    
+    def get_default_params(self) -> dict:
+        """Переопределяем параметры для IfBlock"""
+        return {
+            "left": "",
+            "operator": "eq",
+            "right": "",
+            "true_next": "",
+            "false_next": ""
+        }
+    
+    def set_branches(self, true_block_id: int = None, false_block_id: int = None):
+        """Устанавливает ID блоков для веток true/false"""
+        self.true_branch_id = true_block_id
+        self.false_branch_id = false_block_id
+        if true_block_id:
+            self.params["true_next"] = str(true_block_id)
+        if false_block_id:
+            self.params["false_next"] = str(false_block_id)
+    
+    def get_branch(self, condition_result: bool) -> int:
+        """Возвращает ID следующего блока в зависимости от результата условия"""
+        return self.true_branch_id if condition_result else self.false_branch_id

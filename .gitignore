@@ -16,13 +16,16 @@ __pycache__/
 *.tmp
 *.temp
 
-# Проекты пользователей (сгенерированные парсеры и конфиги)
+# Проекты пользователей - исключаем только содержимое, но не саму папку
 projects/*/built/
 projects/*/*.conf
 projects/*/*.vars.json
 projects/*/profile/     # <--- ПРОФИЛИ ПРОЕКТОВ (куки, сессии)
 projects/*/parser/
-projects
+
+# НЕ исключаем projects/ целиком, иначе папка не будет в репозитории
+# projects/
+
 # Временные профили браузера
 temp_profile_*/
 temp_profile_*

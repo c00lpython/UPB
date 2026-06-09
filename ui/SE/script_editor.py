@@ -8,6 +8,7 @@ from ui.SE.ui.blocks_palette import BlocksPalette
 from ui.SE.ui.canvas_widget import CanvasWidget
 from ui.SE.ui.properties_editor import PropertiesEditor
 from ui.SE.core.serialization import upb_serializer
+from ui.SE.core.compiler import UPBCompiler, compile_workflow
 
 
 class ScriptEditor(QWidget):
@@ -20,6 +21,7 @@ class ScriptEditor(QWidget):
         self.current_project = None
         self.current_workflow_file = None
         self.variables = {}  # Хранилище переменных из variables.xlsx
+        self.variables_path = None  # Путь к файлу variables.xlsx
         
         self.init_ui()
     
@@ -160,10 +162,12 @@ class ScriptEditor(QWidget):
         """Загружает переменные из variables.xlsx текущего проекта"""
         if not self.project_manager:
             self.variables = {}
+            self.variables_path = None
             return
         
         project_path = os.path.join(self.project_manager.projects_dir, project_name)
         variables_file = os.path.join(project_path, "variables.xlsx")
+        self.variables_path = variables_file if os.path.exists(variables_file) else None
         
         if os.path.exists(variables_file):
             try:
@@ -193,16 +197,19 @@ class ScriptEditor(QWidget):
                 self.update_status("⚠️ pandas not installed. Run: pip install pandas openpyxl", True)
                 print("⚠️ pandas not installed. Run: pip install pandas openpyxl")
                 self.variables = {}
+                self.variables_path = None
             except Exception as e:
                 self.update_status(f"⚠️ Error loading variables: {e}", True)
                 print(f"⚠️ Ошибка загрузки переменных: {e}")
                 self.variables = {}
+                self.variables_path = None
         else:
             self.variables = {}
+            self.variables_path = None
             print(f"⚠️ Файл variables.xlsx не найден в {project_path}")
     
     # ========================================================================
-    # Компиляция
+    # Компиляция (с использованием UPBCompiler)
     # ========================================================================
     
     def compile_workflow(self):
@@ -212,59 +219,33 @@ class ScriptEditor(QWidget):
             self.update_status("Cannot compile: empty workflow", True)
             return
         
-        lines = []
-        lines.append("# UPB Parser Script")
-        lines.append(f"# Generated: {QDateTime.currentDateTime().toString()}")
-        lines.append(f"# Total blocks: {len(nodes)}")
-        lines.append("")
-        lines.append("# ============================================")
-        lines.append("# Workflow Structure")
-        lines.append("# ============================================")
-        lines.append("")
+        if not self.project_manager or not self.project_manager.current_project:
+            QMessageBox.warning(self, "No Project", "Open a project first!")
+            return
         
-        # Сначала сохраняем workflow для компиляции
-        if self.project_manager and self.project_manager.current_project:
-            project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
-            workflow_file = os.path.join(project_path, "workflow.json")
-            upb_serializer.save_project(self.canvas, workflow_file)
+        project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
+        workflow_file = os.path.join(project_path, "workflow.json")
         
-        for i, node in enumerate(nodes, 1):
-            block = node.block
-            lines.append(f"# [{i}] {block.name} ({block.node_type})")
-            lines.append(f"# Position: ({block.position['x']}, {block.position['y']})")
-            cmd = self.block_to_command(block)
-            lines.append(cmd)
-            lines.append("")
+        # Сохраняем workflow
+        upb_serializer.save_project(self.canvas, workflow_file)
         
-        # Добавляем секцию связей
-        if self.canvas.edges:
-            lines.append("# ============================================")
-            lines.append("# Connections")
-            lines.append("# ============================================")
-            for edge_id, edge in self.canvas.edges.items():
-                lines.append(f"# {edge.source.block.name} → {edge.destination.block.name}")
-            lines.append("")
+        # Компилируем в script.txt
+        script_path = os.path.join(project_path, "script.txt")
         
-        # Добавляем секцию переменных
-        if self.variables:
-            lines.append("# ============================================")
-            lines.append("# Variables (from variables.xlsx)")
-            lines.append("# ============================================")
-            for var_name, var_data in self.variables.items():
-                lines.append(f"# {var_name} = {var_data.get('selector', '')[:60]}...")
-            lines.append("")
-        
-        if self.project_manager and self.project_manager.current_project:
-            project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
-            script_path = os.path.join(project_path, "script.txt")
-            with open(script_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(lines))
+        try:
+            # Используем компилятор из core.compiler
+            compiler = UPBCompiler(workflow_file, self.variables_path)
+            script = compiler.compile(mode="chain")
+            compiler.save(script_path, mode="chain")
+            
             self.update_status(f"✅ Compiled to {script_path}")
             QMessageBox.information(self, "Success", f"Workflow compiled!\n\n{script_path}")
-        else:
-            preview = '\n'.join(lines[:30])
-            QMessageBox.information(self, "Preview", f"No project opened.\n\n{preview}")
-    
+        except Exception as e:
+            self.update_status(f"❌ Compilation error: {str(e)}", True)
+            QMessageBox.critical(self, "Error", f"Compilation failed:\n\n{str(e)}")
+            import traceback
+            traceback.print_exc()
+
     def block_to_command(self, block) -> str:
         p = block.params
         commands = {

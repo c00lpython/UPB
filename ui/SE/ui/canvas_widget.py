@@ -1,5 +1,3 @@
-# ui/SE/ui/canvas_widget.py - ПОЛНАЯ ВЕРСИЯ с print маркерами
-
 import math
 import json
 from typing import Dict, List, Optional, Any
@@ -7,7 +5,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtWidgets import QGraphicsItem
-from ui.SE.core.models import Block, Connection
+from ui.SE.core.models import Block, Connection, IfBlock
 
 
 class CollapseButton(QGraphicsEllipseItem):
@@ -77,6 +75,12 @@ class GraphNode(QGraphicsRectItem):
         self.child_nodes = []
         self.parent_node = None
         self.collapsed = False
+        
+        # Для подписей портов
+        self.input_label = None
+        self.output_label = None
+        self.true_label = None
+        self.false_label = None
         
         self.ready_to_nest = False
         self.is_potential_parent = False
@@ -175,27 +179,87 @@ class GraphNode(QGraphicsRectItem):
             self.text_item.setPos((self.rect().width() - text_rect.width()) / 2, (self.rect().height() - text_rect.height()) / 2)
     
     def create_ports(self):
+        """Создаёт порты: input слева, output(true) и output(false) справа для IfBlock"""
         rect = self.rect()
         port_size = 8
         
+        # INPUT порт (всегда один, слева)
         input_port = PortItem("input", self, port_size)
         input_port.setBrush(QBrush(QColor("#e74c3c")))
         input_port.setPen(QPen(QColor("#c0392b"), 1))
         input_port.setPos(0, rect.height() / 2)
         input_port.setZValue(2)
         input_port.setData(0, "input")
-        
-        output_port = PortItem("output", self, port_size)
-        output_port.setBrush(QBrush(QColor("#2ecc71")))
-        output_port.setPen(QPen(QColor("#27ae60"), 1))
-        output_port.setPos(rect.width(), rect.height() / 2)
-        output_port.setZValue(2)
-        output_port.setData(0, "output")
-        
         self.ports["input"] = input_port
-        self.ports["output"] = output_port
+        
+        # Добавляем подпись под INPUT портом (отдельно, не в self.ports)
+        input_label = QGraphicsTextItem("in", self)
+        input_label.setDefaultTextColor(QColor("#888888"))
+        font = QFont("Arial", 7)
+        input_label.setFont(font)
+        input_label.setPos(2, rect.height() / 2 + 5)
+        input_label.setVisible(not self.collapsed)
+        self.input_label = input_label  # Храним отдельно
+        
+        # Если это IfBlock - создаём два выходных порта
+        if self.block.node_type == "if":
+            # TRUE порт (зелёный, сверху)
+            true_port = PortItem("true", self, port_size)
+            true_port.setBrush(QBrush(QColor("#2ecc71")))
+            true_port.setPen(QPen(QColor("#27ae60"), 1))
+            true_port.setPos(rect.width(), rect.height() * 0.25)
+            true_port.setZValue(2)
+            true_port.setData(0, "true")
+            self.ports["true"] = true_port
+            
+            # Подпись под TRUE портом
+            true_label = QGraphicsTextItem("true", self)
+            true_label.setDefaultTextColor(QColor("#2ecc71"))
+            font = QFont("Arial", 7)
+            true_label.setFont(font)
+            true_label.setPos(rect.width() - 12, rect.height() * 0.25 + 5)
+            true_label.setVisible(not self.collapsed)
+            self.true_label = true_label  # Храним отдельно
+            
+            # FALSE порт (зелёный, снизу)
+            false_port = PortItem("false", self, port_size)
+            false_port.setBrush(QBrush(QColor("#2ecc71")))
+            false_port.setPen(QPen(QColor("#27ae60"), 1))
+            false_port.setPos(rect.width(), rect.height() * 0.75)
+            false_port.setZValue(2)
+            false_port.setData(0, "false")
+            self.ports["false"] = false_port
+            
+            # Подпись под FALSE портом
+            false_label = QGraphicsTextItem("false", self)
+            false_label.setDefaultTextColor(QColor("#2ecc71"))
+            font = QFont("Arial", 7)
+            false_label.setFont(font)
+            false_label.setPos(rect.width() - 18, rect.height() * 0.75 + 5)
+            false_label.setVisible(not self.collapsed)
+            self.false_label = false_label  # Храним отдельно
+        
+        else:
+            # Обычный блок - один output порт
+            output_port = PortItem("output", self, port_size)
+            output_port.setBrush(QBrush(QColor("#2ecc71")))
+            output_port.setPen(QPen(QColor("#27ae60"), 1))
+            output_port.setPos(rect.width(), rect.height() / 2)
+            output_port.setZValue(2)
+            output_port.setData(0, "output")
+            self.ports["output"] = output_port
+            
+            # Подпись под OUTPUT портом
+            output_label = QGraphicsTextItem("out", self)
+            output_label.setDefaultTextColor(QColor("#888888"))
+            font = QFont("Arial", 7)
+            output_label.setFont(font)
+            output_label.setPos(rect.width() - 14, rect.height() / 2 + 5)
+            output_label.setVisible(not self.collapsed)
+            self.output_label = output_label  # Храним отдельно
+        
         print(f"🔌 [GraphNode] Ports created for {self.block.name}")
-    
+
     def get_port_position(self, port_name):
         if port_name == "center":
             return self.scenePos() + QPointF(self.rect().width() / 2, self.rect().height() / 2)
@@ -219,7 +283,8 @@ class GraphNode(QGraphicsRectItem):
         self.is_dragging_connection = True
         self.drag_start_port = port_name
         
-        if port_name in self.ports:
+        # Исправлено: проверяем тип перед вызовом set_highlighted
+        if port_name in self.ports and isinstance(self.ports[port_name], PortItem):
             self.ports[port_name].set_highlighted(True)
         
         self.temp_connection_line = QGraphicsLineItem()
@@ -232,7 +297,7 @@ class GraphNode(QGraphicsRectItem):
         start_pos = self.get_port_position(port_name)
         self.temp_connection_line.setLine(start_pos.x(), start_pos.y(), start_pos.x(), start_pos.y())
         self._update_status(f"Drag from {port_name.upper()} port to connect...", is_warning=True)
-    
+
     def update_temp_connection(self, pos):
         if self.temp_connection_line and self.drag_start_port:
             start_pos = self.get_port_position(self.drag_start_port)
@@ -242,12 +307,30 @@ class GraphNode(QGraphicsRectItem):
         if not self.drag_start_port:
             return
         
+        # Логика для IfBlock: сохраняем connection в соответствующий branch
+        if self.block.node_type == "if" and self.drag_start_port in ["true", "false"]:
+            # Сохраняем связь в params для сериализации
+            if self.drag_start_port == "true":
+                self.block.params["true_next"] = str(target_node.block.id)
+                if hasattr(self.block, 'true_branch_id'):
+                    self.block.true_branch_id = target_node.block.id
+            else:
+                self.block.params["false_next"] = str(target_node.block.id)
+                if hasattr(self.block, 'false_branch_id'):
+                    self.block.false_branch_id = target_node.block.id
+            
+            print(f"🔗 [IfBlock] Branch {self.drag_start_port}: {self.block.name} → {target_node.block.name}")
+        
+        # Обычная логика соединения
         if self.drag_start_port == "output" and target_port == "input":
             from_node, to_node = self, target_node
             from_port, to_port = "output", "input"
         elif self.drag_start_port == "input" and target_port == "output":
             from_node, to_node = target_node, self
             from_port, to_port = "output", "input"
+        elif self.block.node_type == "if" and self.drag_start_port in ["true", "false"] and target_port == "input":
+            from_node, to_node = self, target_node
+            from_port, to_port = self.drag_start_port, "input"
         else:
             self.cancel_connection_drag()
             return
@@ -256,6 +339,7 @@ class GraphNode(QGraphicsRectItem):
             self.cancel_connection_drag()
             return
         
+        # Проверка на дублирование
         for edge in from_node.edges:
             if edge.destination == to_node:
                 self.cancel_connection_drag()
@@ -283,8 +367,11 @@ class GraphNode(QGraphicsRectItem):
         if self.temp_connection_line:
             self.scene().removeItem(self.temp_connection_line)
             self.temp_connection_line = None
+        
+        # Исправлено: проверяем тип объекта перед вызовом set_highlighted
         for port in self.ports.values():
-            port.set_highlighted(False)
+            if isinstance(port, PortItem):  # Только для портов, не для подписей
+                port.set_highlighted(False)
     
     def _animate_child_appearance(self, child_node):
         child_node.setOpacity(0.0)
@@ -515,6 +602,13 @@ class GraphNode(QGraphicsRectItem):
         self.collapsed = not self.collapsed
         if self.collapse_button:
             self.collapse_button.set_collapsed(self.collapsed)
+        
+        # Скрываем/показываем подписи портов
+        for attr_name in ['input_label', 'output_label', 'true_label', 'false_label']:
+            if hasattr(self, attr_name):
+                label = getattr(self, attr_name)
+                label.setVisible(not self.collapsed)
+        
         if self.collapsed:
             external = self.analyze_external_connections()
             for conn_info in external:
@@ -685,6 +779,8 @@ class GraphNode(QGraphicsRectItem):
                             target_port = target_node.ports["input"]
                         elif self.drag_start_port == "input" and "output" in target_node.ports:
                             target_port = target_node.ports["output"]
+                        elif self.drag_start_port in ["true", "false"] and "input" in target_node.ports:
+                            target_port = target_node.ports["input"]
                         break
                 if target_port and target_node and target_node != self:
                     self.finish_connection_drag(target_node, target_port.port_type)
@@ -758,7 +854,7 @@ class GraphNode(QGraphicsRectItem):
                 if hasattr(self.canvas, 'parent_window'):
                     main_window = self.canvas.parent_window
                     if hasattr(main_window, 'property_editor'):
-                        main_window.property_editor.set_element(self.block)
+                        main_window.property_editor.set_block(self.block)
         return super().itemChange(change, value)
     
     def paint(self, painter, option, widget=None):
@@ -767,6 +863,16 @@ class GraphNode(QGraphicsRectItem):
         path = QPainterPath()
         path.addRoundedRect(self.rect(), self._radius, self._radius)
         painter.drawPath(path)
+        
+        # Для IfBlock показываем условие на блоке
+        if self.block.node_type == "if":
+            condition = f"{self.block.params.get('left', '?')} {self.block.params.get('operator', '?')} {self.block.params.get('right', '?')}"
+            if len(condition) > 20:
+                condition = condition[:17] + "..."
+            painter.setPen(QPen(QColor("#f39c12"), 1))
+            painter.setFont(QFont("Arial", 7))
+            painter.drawText(self.rect().adjusted(5, 25, -5, -5), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, condition)
+        
         if hasattr(self.block, 'is_reference_block') and self.block.is_reference_block():
             painter.setPen(QPen(QColor("#f39c12"), 2))
             painter.setFont(QFont("Arial", 12))
@@ -812,7 +918,7 @@ class GraphNode(QGraphicsRectItem):
 
 
 class PortItem(QGraphicsEllipseItem):
-    """Порт для соединений (INPUT слева, OUTPUT справа)"""
+    """Порт для соединений (INPUT слева, OUTPUT/TRUE/FALSE справа)"""
     
     def __init__(self, port_type, parent_node, size=8):
         print(f"🔌 [PortItem] __init__: {port_type} for {parent_node.block.name}")
@@ -823,22 +929,46 @@ class PortItem(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
         
-        self.default_brush = QBrush(QColor("#e74c3c" if port_type == "input" else "#2ecc71"))
-        self.highlight_brush = QBrush(QColor("#f1c40f" if port_type == "input" else "#f39c12"))
+        # Настройка цветов портов
+        if port_type == "input":
+            self.default_brush = QBrush(QColor("#e74c3c"))  # Красный для INPUT
+            self.highlight_brush = QBrush(QColor("#f1c40f"))
+        elif port_type == "output":
+            self.default_brush = QBrush(QColor("#2ecc71"))  # Зелёный для OUTPUT
+            self.highlight_brush = QBrush(QColor("#f39c12"))
+        elif port_type == "true":
+            self.default_brush = QBrush(QColor("#2ecc71"))  # Зелёный для TRUE
+            self.highlight_brush = QBrush(QColor("#f39c12"))
+        elif port_type == "false":
+            self.default_brush = QBrush(QColor("#2ecc71"))  # Зелёный для FALSE (было #e74c3c)
+            self.highlight_brush = QBrush(QColor("#f39c12"))
+        else:
+            self.default_brush = QBrush(QColor("#3498db"))
+            self.highlight_brush = QBrush(QColor("#f1c40f"))
+        
         self.setBrush(self.default_brush)
         self.setZValue(10)
         self.setData(0, port_type)
-    
+
     def set_highlighted(self, highlighted):
         self.setBrush(self.highlight_brush if highlighted else self.default_brush)
     
     def hoverEnterEvent(self, event):
         self.setBrush(self.highlight_brush)
         self.setScale(1.2)
-        tooltip = "INPUT (receives data)" if self.port_type == "input" else "OUTPUT (sends data)"
+        if self.port_type == "input":
+            tooltip = "INPUT (receives data from previous block)"
+        elif self.port_type == "output":
+            tooltip = "OUTPUT (sends data to next block)"
+        elif self.port_type == "true":
+            tooltip = "TRUE BRANCH (executes when condition is TRUE)"
+        elif self.port_type == "false":
+            tooltip = "FALSE BRANCH (executes when condition is FALSE)"
+        else:
+            tooltip = f"PORT: {self.port_type}"
         self.setToolTip(tooltip)
         super().hoverEnterEvent(event)
-    
+
     def hoverLeaveEvent(self, event):
         self.setBrush(self.default_brush)
         self.setScale(1.0)
@@ -902,7 +1032,15 @@ class GraphEdge(QGraphicsPathItem):
         self.setZValue(-1)
         self.pen_width = 2
         self.setAcceptHoverEvents(True)
-        self.data_color = QColor("#3498db")
+        
+        # Разные цвета для разных типов портов
+        if connection.from_port == "true":
+            self.data_color = QColor("#2ecc71")
+        elif connection.from_port == "false":
+            self.data_color = QColor("#e74c3c")
+        else:
+            self.data_color = QColor("#3498db")
+        
         self.inheritance_color = QColor("#9b59b6")
         self.proxy_color = QColor("#f39c12")
     
@@ -928,7 +1066,6 @@ class GraphEdge(QGraphicsPathItem):
     def delete_connection(self):
         """Удаляет соединение"""
         if self.canvas:
-            # Восстанавливаем оригинальные edge если есть
             if hasattr(self, 'original_edge') and self.original_edge:
                 self.original_edge.show()
             
@@ -1143,7 +1280,6 @@ class CanvasWidget(QGraphicsView):
             self._update_status("No blocks selected to delete", is_warning=True)
             return False
         
-        # Подтверждение если больше 1 блока
         if len(blocks_to_delete) > 1:
             reply = QMessageBox.question(
                 None, 
@@ -1196,6 +1332,7 @@ class CanvasWidget(QGraphicsView):
         
         self._update_status(f"✅ Deleted {deleted_count} connections")
         return True
+    
     def _update_status(self, message: str, is_warning: bool = False):
         try:
             if not message or message.strip() == "":
@@ -1217,17 +1354,13 @@ class CanvasWidget(QGraphicsView):
                     self.status_label.setStyleSheet("")
         except Exception as e:
             print(f"Error updating status: {e}")
-    # В классе CanvasWidget добавь метод keyPressEvent:
-
+    
     def keyPressEvent(self, event):
-        """Обработка горячих клавиш"""
-        # Delete - удалить выбранные блоки
         if event.key() == Qt.Key.Key_Delete:
             self.delete_selected_blocks()
             event.accept()
             return
         
-        # Ctrl+A - выделить все блоки
         if event.key() == Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             for node in self.nodes.values():
                 node.setSelected(True)
@@ -1235,7 +1368,6 @@ class CanvasWidget(QGraphicsView):
             event.accept()
             return
         
-        # Ctrl+Shift+A - снять выделение
         if event.key() == Qt.Key.Key_A and event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
             for node in self.nodes.values():
                 node.setSelected(False)
@@ -1245,19 +1377,16 @@ class CanvasWidget(QGraphicsView):
             event.accept()
             return
         
-        # Delete с Shift - удалить только связи
         if event.key() == Qt.Key.Key_Delete and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.delete_selected_connections()
             event.accept()
             return
         
-        # Ctrl+Shift+Delete - очистить всё
         if event.key() == Qt.Key.Key_Delete and event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
             self.delete_all_blocks()
             event.accept()
             return
         
-        # Escape - снять выделение
         if event.key() == Qt.Key.Key_Escape:
             for node in self.nodes.values():
                 node.setSelected(False)
@@ -1268,6 +1397,7 @@ class CanvasWidget(QGraphicsView):
             return
         
         super().keyPressEvent(event)
+    
     def update_nest_states(self):
         dragged_blocks = []
         for node in self.nodes.values():
@@ -1379,7 +1509,6 @@ class CanvasWidget(QGraphicsView):
         return False
     
     def add_block_from_data(self, node_type: str, name: str, x: float = 0, y: float = 0, color: str = "#3498db"):
-        """Добавляет блок из простых данных (для Drag'n'Drop)"""
         from ui.SE.core.models import Block
         
         print(f"🟣 [CANVAS] add_block_from_data - START: type={node_type}, name={name}, pos=({x},{y})")
@@ -1440,15 +1569,14 @@ class CanvasWidget(QGraphicsView):
         except Exception as e:
             print(f"❌ [CANVAS] add_block - ERROR: {e}")
             raise
+    
     def delete_selected_blocks(self):
-        """Удаляет все выбранные блоки"""
         selected_items = self.scene.selectedItems()
         blocks_to_delete = [item for item in selected_items if isinstance(item, GraphNode)]
         
         if not blocks_to_delete:
             return False
         
-        # Сортируем по глубине (сначала дочерние)
         def get_depth(node, depth=0):
             max_depth = depth
             for child in node.child_nodes:
@@ -1465,14 +1593,12 @@ class CanvasWidget(QGraphicsView):
         if deleted_count > 0:
             self._update_status(f"✅ Deleted {deleted_count} blocks")
             self.block_selected.emit(None)
-            # Автосохранение
             if self.parent_window and hasattr(self.parent_window, 'auto_save_project'):
                 self.parent_window.auto_save_project()
         
         return deleted_count > 0
     
     def remove_block(self, block_id):
-        """Удаляет блок и все связанные с ним соединения"""
         print(f"🗑️ [REMOVE BLOCK] Начало: block_id={block_id}")
         
         if block_id in self.nodes:
@@ -1480,7 +1606,6 @@ class CanvasWidget(QGraphicsView):
             print(f"📦 [REMOVE BLOCK] Блок найден: name={node.block.name}")
             
             try:
-                # Удаляем все соединения, связанные с этим блоком
                 edges_to_remove = []
                 for edge_id, edge in self.edges.items():
                     if edge.source == node or edge.destination == node:
@@ -1488,10 +1613,8 @@ class CanvasWidget(QGraphicsView):
                 
                 print(f"🔗 [REMOVE BLOCK] Удаление {len(edges_to_remove)} соединений")
                 for edge_id in edges_to_remove:
-                    # Удаляем связь из проекта если есть
                     if self.parent_window and hasattr(self.parent_window, 'project'):
                         self.parent_window.project.remove_connection(edge_id)
-                    # Удаляем из сцены
                     edge = self.edges[edge_id]
                     if edge.source:
                         edge.source.remove_edge(edge)
@@ -1500,19 +1623,12 @@ class CanvasWidget(QGraphicsView):
                     self.scene.removeItem(edge)
                     del self.edges[edge_id]
                 
-                # Удаляем связь с родителем
                 if node.parent_node:
                     node.parent_node.remove_child(node)
                 
-                # Рекурсивно удаляем дочерние блоки
                 for child in node.child_nodes[:]:
                     self.remove_block(child.block.id)
                 
-                # Удаляем из палитры если это reference блок (пока закомментировано)
-                # if self.parent_window and hasattr(self.parent_window, 'palette'):
-                #     self.parent_window.palette.remove_created_block(block_id)
-                
-                # Удаляем блок со сцены
                 self.scene.removeItem(node)
                 del self.nodes[block_id]
                 
