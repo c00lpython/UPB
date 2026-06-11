@@ -1,13 +1,16 @@
 from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QComboBox, QWidget, 
     QVBoxLayout, QHBoxLayout, QPushButton, QHeaderView,
-    QLineEdit
+    QLineEdit, QMenu, QApplication
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 import re
 
 
 class VmTable(QWidget):
+    # Сигнал для открытия в браузере
+    view_in_browser_requested = pyqtSignal(str, str)  # url, xpath
+    
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout()
@@ -116,13 +119,17 @@ class VmTable(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         
-        # Отключаем вертикальную колонку с номерами строк (убирает белую полосу)
+        # Включаем контекстное меню
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_context_menu)
+        
+        # Отключаем вертикальную колонку с номерами строк
         self.table.verticalHeader().setVisible(False)
         
         # Отключаем чередование цветов (зебру)
         self.table.setAlternatingRowColors(False)
         
-        # Единый стиль для всей таблицы (тёмные заголовки, без белых строк)
+        # Единый стиль для всей таблицы
         self.table.setStyleSheet("""
             QTableWidget {
                 background-color: #2d2d2d;
@@ -152,7 +159,7 @@ class VmTable(QWidget):
             }
         """)
         
-        # Убираем сетку (белые обводки между ячейками)
+        # Убираем сетку
         self.table.setShowGrid(False)
         
         layout.addLayout(search_layout)
@@ -164,6 +171,125 @@ class VmTable(QWidget):
         self.btn_add.clicked.connect(self.add_empty_variable)
         self.btn_remove.clicked.connect(self.remove_selected)
         self.btn_clear.clicked.connect(self.clear_all)
+    
+    def _show_context_menu(self, pos):
+        """Показывает контекстное меню для выбранной строки"""
+        # Получаем строку по позиции клика
+        row = self.table.rowAt(pos.y())
+        if row < 0:
+            return
+        
+        # Выделяем строку
+        self.table.selectRow(row)
+        
+        # Получаем данные из строки
+        name_item = self.table.item(row, 0)
+        xpath_item = self.table.item(row, 1)
+        type_combo = self.table.cellWidget(row, 2)
+        url_item = self.table.item(row, 3)
+        sample_item = self.table.item(row, 4)
+        
+        var_name = name_item.text().strip() if name_item else ""
+        xpath = xpath_item.text().strip() if xpath_item else ""
+        var_type = type_combo.currentText() if type_combo else "Static"
+        url = url_item.text().strip() if url_item else ""
+        sample = sample_item.text().strip() if sample_item else ""
+        
+        if not var_name:
+            return
+        
+        # Создаём контекстное меню
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #2d2d2d;
+                color: #cccccc;
+                border: 1px solid #3d5afe;
+                border-radius: 6px;
+                padding: 4px;
+                font-size: 12px;
+            }
+            QMenu::item {
+                padding: 8px 30px 8px 12px;
+                border-radius: 4px;
+                margin: 2px 4px;
+            }
+            QMenu::item:selected {
+                background-color: #094771;
+                color: #ffffff;
+            }
+            QMenu::item:disabled {
+                color: #666666;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #444;
+                margin: 4px 8px;
+            }
+        """)
+        
+        # Заголовок с именем переменной
+        header = menu.addAction(f"📦 {var_name}")
+        header.setEnabled(False)
+        
+        # Тип переменной
+        type_action = menu.addAction(f"📌 Type: {var_type}")
+        type_action.setEnabled(False)
+        
+        menu.addSeparator()
+        
+        # View in Browser (только если есть URL)
+        if url:
+            view_action = menu.addAction("🌐 View in Browser")
+            view_action.setToolTip(f"Open {url} and highlight element by XPath")
+            view_action.triggered.connect(
+                lambda checked=False, u=url, x=xpath: self.view_in_browser_requested.emit(u, x)
+            )
+        else:
+            no_url = menu.addAction("🌐 View in Browser (no URL)")
+            no_url.setEnabled(False)
+        
+        menu.addSeparator()
+        
+        # Копирование данных
+        copy_menu = menu.addMenu("📋 Copy")
+        copy_menu.setStyleSheet(menu.styleSheet())
+        
+        copy_name = copy_menu.addAction("Copy Name")
+        copy_name.triggered.connect(lambda: QApplication.clipboard().setText(var_name))
+        
+        if xpath:
+            copy_xpath = copy_menu.addAction("Copy XPath")
+            copy_xpath.triggered.connect(lambda: QApplication.clipboard().setText(xpath))
+        
+        if url:
+            copy_url = copy_menu.addAction("Copy URL")
+            copy_url.triggered.connect(lambda: QApplication.clipboard().setText(url))
+        
+        if sample:
+            copy_sample = copy_menu.addAction("Copy Sample")
+            copy_sample.triggered.connect(lambda: QApplication.clipboard().setText(sample))
+        
+        copy_all = copy_menu.addAction("Copy All")
+        copy_all.triggered.connect(
+            lambda: QApplication.clipboard().setText(
+                f"Name: {var_name}\nXPath: {xpath}\nType: {var_type}\nURL: {url}\nSample: {sample}"
+            )
+        )
+        
+        menu.addSeparator()
+        
+        # Удаление
+        delete_action = menu.addAction("🗑 Delete Variable")
+        delete_action.triggered.connect(lambda: self._delete_row(row))
+        
+        # Показываем меню
+        menu.exec(self.table.viewport().mapToGlobal(pos))
+    
+    def _delete_row(self, row: int):
+        """Удаляет строку по индексу"""
+        if 0 <= row < self.table.rowCount():
+            self.table.removeRow(row)
     
     def filter_table(self):
         """Фильтрует таблицу по поисковому запросу"""

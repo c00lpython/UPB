@@ -3,56 +3,478 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 
 
+class IntelliSensePopup(QWidget):
+    """Всплывающее окно IntelliSense"""
+    
+    item_selected = pyqtSignal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(
+            Qt.WindowType.Tool |
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(2, 2, 2, 2)
+        
+        content_widget = QWidget()
+        content_widget.setObjectName("intelliContent")
+        content_widget.setStyleSheet("""
+            #intelliContent {
+                background-color: #252526;
+                border: 1px solid #3d5afe;
+                border-radius: 6px;
+            }
+        """)
+        
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(12)
+        shadow.setColor(QColor(0, 0, 0, 100))
+        shadow.setOffset(0, 3)
+        content_widget.setGraphicsEffect(shadow)
+        
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        
+        self.header = QLabel()
+        self.header.setFixedHeight(24)
+        self.header.setStyleSheet("color: #999; font-size: 9px; padding: 4px 12px 2px 12px; background: transparent; border-bottom: 1px solid #333;")
+        self.header.hide()
+        content_layout.addWidget(self.header)
+        
+        self.list_widget = QListWidget()
+        self.list_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                background-color: transparent;
+                color: #d4d4d4;
+                border: none;
+                font-family: 'Consolas', monospace;
+                font-size: 12px;
+                outline: none;
+                padding: 4px 0px;
+            }
+            QListWidget::item {
+                padding: 6px 12px;
+                border-left: 3px solid transparent;
+            }
+            QListWidget::item:selected {
+                background-color: #094771;
+                color: #ffffff;
+                border-left: 3px solid #0078d4;
+            }
+            QListWidget::item:hover {
+                background-color: #2a2d2e;
+            }
+            QScrollBar:vertical {
+                background: #1e1e1e;
+                width: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #424242;
+                border-radius: 3px;
+                min-height: 20px;
+            }
+        """)
+        content_layout.addWidget(self.list_widget)
+        
+        main_layout.addWidget(content_widget)
+        
+        self.list_widget.itemClicked.connect(self._on_item_clicked)
+        
+        self.setFixedWidth(280)
+        self.max_items_visible = 8
+    
+    def _on_item_clicked(self, item):
+        if item:
+            text = item.text()
+            self.hide()
+            self.item_selected.emit(text)
+    
+    def set_items(self, items: list, title: str = "", filter_text: str = ""):
+        self.list_widget.clear()
+        
+        if not items:
+            self.hide()
+            return
+        
+        if title:
+            self.header.setText(title)
+            self.header.show()
+        else:
+            self.header.hide()
+        
+        if filter_text:
+            starts = [i for i in items if i.lower().startswith(filter_text.lower())]
+            others = [i for i in items if i not in starts]
+            sorted_items = starts + others
+        else:
+            sorted_items = items
+        
+        for text in sorted_items:
+            item = QListWidgetItem(text)
+            item.setSizeHint(QSize(0, 28))
+            self.list_widget.addItem(item)
+        
+        header_h = 24 if title else 0
+        visible = min(len(sorted_items), self.max_items_visible)
+        visible = max(visible, 1)
+        h = header_h + (visible * 28) + 4
+        self.setFixedHeight(h)
+        
+        if self.list_widget.count() > 0:
+            self.list_widget.setCurrentRow(0)
+    
+    def select_next(self):
+        cur = self.list_widget.currentRow()
+        if cur < self.list_widget.count() - 1:
+            self.list_widget.setCurrentRow(cur + 1)
+    
+    def select_prev(self):
+        cur = self.list_widget.currentRow()
+        if cur > 0:
+            self.list_widget.setCurrentRow(cur - 1)
+    
+    def get_current_item(self) -> str:
+        item = self.list_widget.currentItem()
+        return item.text() if item else None
+    
+    def underMouse(self) -> bool:
+        return self.rect().contains(self.mapFromGlobal(QCursor.pos()))
+
+
+class CompleterLineEdit(QLineEdit):
+    """QLineEdit с IntelliSense popup"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._popup = None
+        self._completion_words = []
+        self._variables_data = {}
+    
+    def set_completion_words(self, words: list, variables_data: dict = None):
+        self._completion_words = sorted(set(words))
+        self._variables_data = variables_data or {}
+    
+    def _get_word_under_cursor(self) -> tuple:
+        cursor_pos = self.cursorPosition()
+        text = self.text()
+        start = cursor_pos
+        while start > 0 and (text[start-1].isalnum() or text[start-1] in ['_', '.', '{', '}']):
+            start -= 1
+        return start, text[start:cursor_pos]
+    
+    def _get_context(self) -> tuple:
+        _, word = self._get_word_under_cursor()
+        word = word.replace('{{', '').replace('{', '').replace('}', '')
+        
+        if '.' in word:
+            parts = word.rsplit('.', 1)
+            var_name = parts[0].strip()
+            filter_key = parts[1].strip() if len(parts) > 1 else ""
+            return (filter_key, "keys", var_name)
+        else:
+            return (word.strip(), "variables", "")
+    
+    def _show_popup(self):
+        filter_text, context, var_name = self._get_context()
+        
+        if context == "keys" and var_name in self._variables_data:
+            data = self._variables_data[var_name]
+            keys = []
+            
+            keys.append(f"Name: {var_name}")
+            if data.get('selector'):
+                keys.append(f"XPath: {data['selector'][:60]}")
+            if data.get('url'):
+                keys.append(f"URL: {data['url'][:60]}")
+            if data.get('sample'):
+                sample = str(data['sample']).replace('\n', ' ')[:60]
+                keys.append(f"Sample: {sample}")
+            
+            if filter_text:
+                keys = [k for k in keys if filter_text.lower() in k.lower()]
+            
+            if keys:
+                if not self._popup:
+                    self._popup = IntelliSensePopup(self.window())
+                    self._popup.item_selected.connect(self._insert_completion)
+                self._popup.set_items(keys, f"📦 {var_name} keys", filter_text)
+                pos = self.mapToGlobal(QPoint(0, self.height() + 2))
+                self._popup.move(pos)
+                self._popup.show()
+            else:
+                if self._popup:
+                    self._popup.hide()
+        
+        elif context == "variables":
+            if filter_text:
+                matches = [w for w in self._completion_words if filter_text.lower() in w.lower()]
+            else:
+                matches = self._completion_words.copy()
+            
+            if matches:
+                if not self._popup:
+                    self._popup = IntelliSensePopup(self.window())
+                    self._popup.item_selected.connect(self._insert_completion)
+                self._popup.set_items(matches, "📝 Variables", filter_text)
+                pos = self.mapToGlobal(QPoint(0, self.height() + 2))
+                self._popup.move(pos)
+                self._popup.show()
+            else:
+                if self._popup:
+                    self._popup.hide()
+    
+    def _insert_completion(self, completion: str):
+        if not completion:
+            return
+        
+        _, context, var_name = self._get_context()
+        
+        if context == "keys":
+            start, word = self._get_word_under_cursor()
+            text = self.text()
+            
+            if ': ' in completion:
+                key_name = completion.split(': ')[0].lower()
+            else:
+                key_name = completion.lower()
+            
+            dot_pos = text.rfind('.', 0, start + len(word))
+            if dot_pos >= 0:
+                new_text = text[:dot_pos + 1] + key_name + text[start + len(word):]
+                self.setText(new_text)
+                self.setCursorPosition(dot_pos + 1 + len(key_name))
+            else:
+                new_text = text[:start] + key_name + text[start + len(word):]
+                self.setText(new_text)
+                self.setCursorPosition(start + len(key_name))
+        else:
+            start, word = self._get_word_under_cursor()
+            text = self.text()
+            new_text = text[:start] + completion + text[start + len(word):]
+            self.setText(new_text)
+            self.setCursorPosition(start + len(completion))
+        
+        self.setFocus()
+        self.activateWindow()
+    
+    def event(self, event):
+        """Перехватываем ВСЕ события для блокировки Tab"""
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            
+            if self._popup and self._popup.isVisible():
+                if key == Qt.Key.Key_Tab:
+                    item = self._popup.get_current_item()
+                    if item:
+                        self._insert_completion(item)
+                        self._show_popup()
+                    return True  # ПОГЛОЩАЕМ Tab
+                elif key == Qt.Key.Key_Down:
+                    self._popup.select_next()
+                    return True
+                elif key == Qt.Key.Key_Up:
+                    self._popup.select_prev()
+                    return True
+                elif key in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
+                    item = self._popup.get_current_item()
+                    if item:
+                        self._insert_completion(item)
+                        self._show_popup()
+                    return True
+                elif key == Qt.Key.Key_Escape:
+                    self._popup.hide()
+                    return True
+            
+            result = super().event(event)
+            if event.text() and event.text().isprintable():
+                self._show_popup()
+            elif key == Qt.Key.Key_Backspace:
+                self._show_popup()
+            elif key == Qt.Key.Key_Delete:
+                self._show_popup()
+            return result
+        
+        elif event.type() == QEvent.Type.FocusOut:
+            if self._popup and self._popup.isVisible():
+                QTimer.singleShot(100, self._check_hide_popup)
+            return super().event(event)
+        
+        return super().event(event)
+    
+    def _check_hide_popup(self):
+        if self._popup and self._popup.isVisible():
+            if not self.hasFocus() and not self._popup.underMouse():
+                self._popup.hide()
+
+
 class SearchableComboBox(QComboBox):
-    """ComboBox с поиском/фильтрацией"""
+    """ComboBox с IntelliSense popup"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setEditable(True)
         self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self.lineEdit().textEdited.connect(self.on_text_edited)
+        
+        self.line_edit = self.lineEdit()
+        self.line_edit.textEdited.connect(self._on_text_edited)
+        
+        self._popup = None
+        self._completion_words = []
+        self._variables_data = {}
         self.all_items = []
         self.filtered_items = []
-        self.variables_data = {}
         self._updating = False
+        
         self.setStyleSheet("""
             QComboBox {
                 background-color: #3a3a3a;
                 color: #ddd;
                 border: 1px solid #555;
                 border-radius: 4px;
-                padding: 4px 6px;
+                padding: 6px 8px;
                 font-size: 11px;
+                min-width: 180px;
             }
             QComboBox:focus { border: 1px solid #3d5afe; }
             QComboBox QAbstractItemView {
                 background-color: #3a3a3a;
                 color: #ddd;
                 selection-background-color: #3d5afe;
+                min-width: 300px;
             }
         """)
+    
+    def set_completion_words(self, words: list, variables_data: dict = None):
+        self._completion_words = sorted(set(words))
+        self._variables_data = variables_data or {}
+    
+    def _get_word_under_cursor(self) -> tuple:
+        cursor_pos = self.line_edit.cursorPosition()
+        text = self.line_edit.text()
+        start = cursor_pos
+        while start > 0 and (text[start-1].isalnum() or text[start-1] in ['_', '.', '{', '}']):
+            start -= 1
+        return start, text[start:cursor_pos]
+    
+    def _get_context(self) -> tuple:
+        _, word = self._get_word_under_cursor()
+        word = word.replace('{{', '').replace('{', '').replace('}', '')
+        
+        if '.' in word:
+            parts = word.rsplit('.', 1)
+            var_name = parts[0].strip()
+            filter_key = parts[1].strip() if len(parts) > 1 else ""
+            return (filter_key, "keys", var_name)
+        else:
+            return (word.strip(), "variables", "")
+    
+    def _show_popup(self):
+        filter_text, context, var_name = self._get_context()
+        
+        if context == "keys" and var_name in self._variables_data:
+            data = self._variables_data[var_name]
+            keys = []
+            
+            keys.append(f"Name: {var_name}")
+            if data.get('selector'):
+                keys.append(f"XPath: {data['selector'][:60]}")
+            if data.get('url'):
+                keys.append(f"URL: {data['url'][:60]}")
+            if data.get('sample'):
+                sample = str(data['sample']).replace('\n', ' ')[:60]
+                keys.append(f"Sample: {sample}")
+            
+            if filter_text:
+                keys = [k for k in keys if filter_text.lower() in k.lower()]
+            
+            if keys:
+                if not self._popup:
+                    self._popup = IntelliSensePopup(self.window())
+                    self._popup.item_selected.connect(self._insert_completion)
+                self._popup.set_items(keys, f"📦 {var_name} keys", filter_text)
+                pos = self.mapToGlobal(QPoint(0, self.height() + 2))
+                self._popup.move(pos)
+                self._popup.show()
+            else:
+                if self._popup:
+                    self._popup.hide()
+        
+        elif context == "variables":
+            if filter_text:
+                matches = [w for w in self._completion_words if filter_text.lower() in w.lower()]
+            else:
+                matches = self._completion_words.copy()
+            
+            if matches:
+                if not self._popup:
+                    self._popup = IntelliSensePopup(self.window())
+                    self._popup.item_selected.connect(self._insert_completion)
+                self._popup.set_items(matches, "📝 Variables", filter_text)
+                pos = self.mapToGlobal(QPoint(0, self.height() + 2))
+                self._popup.move(pos)
+                self._popup.show()
+            else:
+                if self._popup:
+                    self._popup.hide()
+    
+    def _insert_completion(self, completion: str):
+        if not completion:
+            return
+        
+        _, context, var_name = self._get_context()
+        
+        if context == "keys":
+            start, word = self._get_word_under_cursor()
+            text = self.line_edit.text()
+            
+            if ': ' in completion:
+                key_name = completion.split(': ')[0].lower()
+            else:
+                key_name = completion.lower()
+            
+            dot_pos = text.rfind('.', 0, start + len(word))
+            if dot_pos >= 0:
+                new_text = text[:dot_pos + 1] + key_name + text[start + len(word):]
+                self.line_edit.setText(new_text)
+                self.line_edit.setCursorPosition(dot_pos + 1 + len(key_name))
+            else:
+                new_text = text[:start] + key_name + text[start + len(word):]
+                self.line_edit.setText(new_text)
+                self.line_edit.setCursorPosition(start + len(key_name))
+        else:
+            start, word = self._get_word_under_cursor()
+            text = self.line_edit.text()
+            new_text = text[:start] + completion + text[start + len(word):]
+            self.line_edit.setText(new_text)
+            self.line_edit.setCursorPosition(start + len(completion))
+        
+        self.line_edit.setFocus()
+        self.line_edit.activateWindow()
+        self._update_combo_value()
+    
+    def _update_combo_value(self):
+        text = self.line_edit.text()
+        idx = self.findText(text)
+        if idx >= 0:
+            self.setCurrentIndex(idx)
     
     def set_items(self, items: list, variables_data: dict = None):
         self._updating = True
         self.clear()
-        self.variables_data = variables_data or {}
+        self._variables_data = variables_data or {}
+        self.all_items = [(name, name) for name in items]
         
-        if items and isinstance(items[0], tuple):
-            self.all_items = items.copy()
-            for idx, (display, actual) in enumerate(items):
-                self.addItem(display)
-                if actual in self.variables_data:
-                    data = self.variables_data[actual]
-                    tooltip = f"📦 {actual}"
-                    if data.get('selector'):
-                        tooltip += f"\n🎯 {data['selector'][:50]}"
-                    if data.get('sample'):
-                        tooltip += f"\n📝 {data['sample'][:50]}"
-                    self.setItemData(idx, tooltip, Qt.ItemDataRole.ToolTipRole)
-        else:
-            self.all_items = [(item, item) for item in items]
-            for display, actual in self.all_items:
-                self.addItem(display)
+        for idx, (display, actual) in enumerate(self.all_items):
+            self.addItem(display)
         
         self.filtered_items = self.all_items.copy()
         self._updating = False
@@ -64,17 +486,18 @@ class SearchableComboBox(QComboBox):
                 return actual
         return current_text
     
-    def on_text_edited(self, text):
+    def _on_text_edited(self, text):
         if self._updating:
             return
-        self._filter_items(text)
+        self._show_popup()
+        self._filter_combo_items(text)
     
-    def _filter_items(self, text):
+    def _filter_combo_items(self, text):
         if self._updating or not self.all_items:
             return
         
         self._updating = True
-        current_text = self.lineEdit().text()
+        current_text = self.line_edit.text()
         self.clear()
         
         if not text:
@@ -82,497 +505,65 @@ class SearchableComboBox(QComboBox):
         else:
             self.filtered_items = [(d, a) for d, a in self.all_items if d.lower().startswith(text.lower())]
         
-        for idx, (display, actual) in enumerate(self.filtered_items):
+        for display, actual in self.filtered_items:
             self.addItem(display)
-            if actual in self.variables_data:
-                data = self.variables_data[actual]
-                tooltip = f"📦 {actual}"
-                if data.get('selector'):
-                    tooltip += f"\n🎯 {data['selector'][:50]}"
-                self.setItemData(idx, tooltip, Qt.ItemDataRole.ToolTipRole)
         
-        if self.lineEdit().text() != current_text:
-            self.lineEdit().setText(current_text)
+        if self.line_edit.text() != current_text:
+            self.line_edit.setText(current_text)
         
         self._updating = False
+    
+    def event(self, event):
+        """Перехватываем ВСЕ события для блокировки Tab"""
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            
+            if self._popup and self._popup.isVisible():
+                if key == Qt.Key.Key_Tab:
+                    item = self._popup.get_current_item()
+                    if item:
+                        self._insert_completion(item)
+                        self._show_popup()
+                    return True  # ПОГЛОЩАЕМ Tab
+                elif key == Qt.Key.Key_Down:
+                    self._popup.select_next()
+                    return True
+                elif key == Qt.Key.Key_Up:
+                    self._popup.select_prev()
+                    return True
+                elif key in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
+                    item = self._popup.get_current_item()
+                    if item:
+                        self._insert_completion(item)
+                        self._show_popup()
+                    return True
+                elif key == Qt.Key.Key_Escape:
+                    self._popup.hide()
+                    return True
+            
+            return super().event(event)
+        
+        elif event.type() == QEvent.Type.FocusOut:
+            if self._popup and self._popup.isVisible():
+                QTimer.singleShot(100, self._check_hide_popup)
+            return super().event(event)
+        
+        return super().event(event)
+    
+    def _check_hide_popup(self):
+        if self._popup and self._popup.isVisible():
+            if not self.line_edit.hasFocus() and not self._popup.underMouse():
+                self._popup.hide()
     
     def showPopup(self):
         if self.count() > 0:
             super().showPopup()
-
-
-class CodeEditorWithCompleter(QTextEdit):
-    """Текстовый редактор с QCompleter (как в VSCode)"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setStyleSheet("""
-            QTextEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: 1px solid #3c3c3c;
-                border-radius: 4px;
-                padding: 6px;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 11px;
-            }
-            QTextEdit:focus {
-                border: 1px solid #3d5afe;
-            }
-        """)
-        
-        self.completer = None
-    
-    def set_completer(self, completer: QCompleter):
-        """Устанавливает QCompleter для автокомплита"""
-        # Отключаем старый completer
-        if self.completer:
-            try:
-                self.completer.activated.disconnect()
-            except:
-                pass
-        
-        self.completer = completer
-        
-        if not completer:
-            return
-        
-        completer.setWidget(self)
-        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        
-        # Подключаем сигнал
-        completer.activated.connect(self._insert_completion)
-        
-        # Настраиваем всплывающее окно
-        popup = completer.popup()
-        popup.setStyleSheet("""
-            QListView {
-                background-color: #252526;
-                color: #d4d4d4;
-                border: 1px solid #3d5afe;
-                font-family: 'Consolas', monospace;
-                font-size: 11px;
-                outline: none;
-            }
-            QListView::item {
-                padding: 4px 8px;
-            }
-            QListView::item:selected {
-                background-color: #3d5afe;
-                color: white;
-            }
-        """)
-    
-    def _get_text_under_cursor(self) -> str:
-        """Возвращает слово под курсором (для автокомплита)"""
-        cursor = self.textCursor()
-        cursor.select(QTextCursor.SelectionType.WordUnderCursor)
-        return cursor.selectedText()
-    
-    def keyPressEvent(self, event):
-        # Если комплитер активен и показан - обрабатываем навигацию
-        if self.completer and self.completer.popup().isVisible():
-            if event.key() == Qt.Key.Key_Tab:
-                # TAB - вставляем выбранный вариант
-                self._insert_current_completion()
-                event.accept()
-                return
-            elif event.key() == Qt.Key.Key_Down:
-                # Стрелка вниз - следующий элемент
-                current = self.completer.popup().currentIndex()
-                next_row = current.row() + 1
-                if next_row < self.completer.completionModel().rowCount():
-                    self.completer.popup().setCurrentIndex(
-                        self.completer.completionModel().index(next_row, 0)
-                    )
-                event.accept()
-                return
-            elif event.key() == Qt.Key.Key_Up:
-                # Стрелка вверх - предыдущий элемент
-                current = self.completer.popup().currentIndex()
-                prev_row = current.row() - 1
-                if prev_row >= 0:
-                    self.completer.popup().setCurrentIndex(
-                        self.completer.completionModel().index(prev_row, 0)
-                    )
-                event.accept()
-                return
-            elif event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
-                # Enter - вставляем и подтверждаем
-                self._insert_current_completion()
-                event.accept()
-                return
-            elif event.key() == Qt.Key.Key_Escape:
-                self.completer.popup().hide()
-                event.accept()
-                return
-        
-        # Обычная обработка
-        super().keyPressEvent(event)
-        
-        # Автоматический показ комплитера при вводе
-        if self.completer and not self.completer.popup().isVisible():
-            # Не показываем при навигационных клавишах
-            if event.key() in (Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt,
-                               Qt.Key.Key_Meta, Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
-                return
-            
-            # Получаем текущее слово
-            completion_prefix = self._get_text_under_cursor()
-            
-            # Показываем комплитер если слово начинается с 'v'
-            if len(completion_prefix) >= 1 and completion_prefix[0].lower() == 'v':
-                self.completer.setCompletionPrefix(completion_prefix)
-                
-                # Показываем комплитер
-                cursor_rect = self.cursorRect()
-                cursor_rect.setWidth(self.completer.popup().sizeHintForColumn(0) + 20)
-                self.completer.complete(cursor_rect)
-                
-                # Выбираем первый элемент если есть
-                if self.completer.popup().isVisible() and self.completer.completionModel().rowCount() > 0:
-                    self.completer.popup().setCurrentIndex(
-                        self.completer.completionModel().index(0, 0)
-                    )
-            else:
-                self.completer.popup().hide()
-    
-    def _insert_current_completion(self):
-        """Вставляет текущий выбранный вариант из комплитера"""
-        if self.completer and self.completer.popup().isVisible():
-            current_index = self.completer.popup().currentIndex()
-            if current_index.isValid():
-                completion = self.completer.completionModel().data(current_index, Qt.ItemDataRole.DisplayRole)
-                if completion:
-                    self._insert_completion(completion)
-    
-    def _insert_completion(self, completion: str):
-        """Вставляет выбранное завершение в текст"""
-        if self.completer and self.completer.widget() != self:
-            return
-        
-        cursor = self.textCursor()
-        
-        # Удаляем текущее слово под курсором
-        cursor.select(QTextCursor.SelectionType.WordUnderCursor)
-        cursor.removeSelectedText()
-        
-        # Вставляем завершение
-        cursor.insertText(completion)
-        self.setTextCursor(cursor)
-        
-        # Скрываем комплитер
-        if self.completer:
-            self.completer.popup().hide()
-
-class ConditionVariableWidget(QWidget):
-    """Виджет для valN - компактная версия"""
-    
-    value_changed = pyqtSignal(str, str)
-    delete_requested = pyqtSignal(str)
-    
-    def __init__(self, var_name: str, value: str = "", get_variables_callback=None, parent=None):
-        super().__init__(parent)
-        self.var_name = var_name
-        self.get_variables_callback = get_variables_callback
-        self.setup_ui(value)
-    
-    def setup_ui(self, current_value):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 2, 0, 2)
-        layout.setSpacing(6)
-        
-        name_label = QLabel(self.var_name)
-        name_label.setFixedWidth(35)
-        name_label.setStyleSheet("""
-            QLabel {
-                color: #3d5afe;
-                font-weight: bold;
-                font-size: 10px;
-                background: #2d2d2d;
-                border-radius: 3px;
-                padding: 3px;
-            }
-        """)
-        layout.addWidget(name_label)
-        
-        self.value_combo = SearchableComboBox()
-        self.value_combo.setMinimumWidth(160)
-        
-        if self.get_variables_callback:
-            variables = self.get_variables_callback()
-            items = [("✏️ custom", "custom")]
-            for var_name in variables.keys():
-                items.append((var_name, var_name))
-            self.value_combo.set_items(items, variables)
-        
-        if current_value:
-            found = False
-            for i in range(self.value_combo.count()):
-                if self.value_combo.itemText(i) == current_value:
-                    self.value_combo.setCurrentIndex(i)
-                    found = True
-                    break
-            if not found:
-                self.value_combo.setCurrentText(current_value)
-        
-        self.value_combo.currentTextChanged.connect(self._on_value_changed)
-        layout.addWidget(self.value_combo, 1)
-        
-        delete_btn = QPushButton("✕")
-        delete_btn.setFixedSize(20, 20)
-        delete_btn.setStyleSheet("""
-            QPushButton {
-                background: #e74c3c;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                font-size: 10px;
-            }
-            QPushButton:hover { background: #c0392b; }
-        """)
-        delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.var_name))
-        layout.addWidget(delete_btn)
-    
-    def _on_value_changed(self, text):
-        actual = self.value_combo.get_actual_value()
-        if actual == "custom":
-            actual = text
-        self.value_changed.emit(self.var_name, actual)
-    
-    def get_value(self) -> str:
-        actual = self.value_combo.get_actual_value()
-        if actual == "custom":
-            return self.value_combo.currentText()
-        return actual
-
-
-class IfBlockProperties(QWidget):
-    """IfBlock свойства с автокомплитом как в VSCode"""
-    
-    property_changed = pyqtSignal(dict)
-    
-    def __init__(self, block, get_variables_callback=None, parent=None):
-        super().__init__(parent)
-        self.block = block
-        self.get_variables_callback = get_variables_callback
-        self.val_widgets = {}
-        self._completer_model = None
-        self.setup_ui()
-        self.load_from_block()
-    
-    def _update_completer_model(self):
-        """Обновляет модель комплитера текущими valN переменными"""
-        word_list = list(self.val_widgets.keys())
-        # Добавляем Python ключевые слова
-        keywords = ["and", "or", "not", "True", "False", "None", "in", "is"]
-        word_list.extend(keywords)
-        word_list = sorted(set(word_list))  # Уникальные и сортированные
-        
-        self._completer_model = QStringListModel(word_list)
-        completer = QCompleter(self._completer_model)
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        
-        self.code_editor.set_completer(completer)
-    
-    def setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        
-        # Переменные
-        vars_group = QGroupBox("📦 Variables")
-        vars_group.setStyleSheet("""
-            QGroupBox {
-                color: #3d5afe;
-                font-weight: bold;
-                border: 1px solid #444;
-                border-radius: 5px;
-                margin-top: 8px;
-                padding-top: 8px;
-                font-size: 11px;
-            }
-            QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 5px; }
-        """)
-        vars_layout = QVBoxLayout(vars_group)
-        vars_layout.setSpacing(4)
-        
-        self.vars_container = QWidget()
-        self.vars_layout_inner = QVBoxLayout(self.vars_container)
-        self.vars_layout_inner.setContentsMargins(2, 2, 2, 2)
-        self.vars_layout_inner.setSpacing(4)
-        self.vars_layout_inner.addStretch()
-        
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self.vars_container)
-        scroll.setMaximumHeight(200)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        vars_layout.addWidget(scroll)
-        
-        add_btn = QPushButton("+ Add valN")
-        add_btn.setStyleSheet("""
-            QPushButton {
-                background: #3d5afe;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                padding: 4px;
-                font-size: 10px;
-            }
-            QPushButton:hover { background: #5c7cfa; }
-        """)
-        add_btn.clicked.connect(self._add_variable)
-        vars_layout.addWidget(add_btn)
-        
-        layout.addWidget(vars_group)
-        
-        # Условие
-        cond_group = QGroupBox("⚡ Condition")
-        cond_group.setStyleSheet(vars_group.styleSheet())
-        cond_layout = QVBoxLayout(cond_group)
-        
-        hint = QLabel("💡 Python expression: val1 == val2 and val3 > 10")
-        hint.setStyleSheet("color: #888; font-size: 9px;")
-        cond_layout.addWidget(hint)
-        
-        hint2 = QLabel("   Type 'v' for variables list | TAB to insert")
-        hint2.setStyleSheet("color: #3d5afe; font-size: 9px;")
-        cond_layout.addWidget(hint2)
-        
-        self.code_editor = CodeEditorWithCompleter()
-        self.code_editor.setMaximumHeight(100)
-        self.code_editor.setPlaceholderText("val1 == 'active' and val2 > 100")
-        self.code_editor.textChanged.connect(self._on_condition_changed)
-        cond_layout.addWidget(self.code_editor)
-        
-        validate_btn = QPushButton("✓ Validate")
-        validate_btn.setStyleSheet("""
-            QPushButton {
-                background: #27ae60;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                padding: 4px;
-                font-size: 10px;
-            }
-            QPushButton:hover { background: #2ecc71; }
-        """)
-        validate_btn.clicked.connect(self._validate)
-        cond_layout.addWidget(validate_btn)
-        
-        self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: #888; font-size: 9px;")
-        cond_layout.addWidget(self.status_label)
-        
-        layout.addWidget(cond_group)
-        layout.addStretch()
-    
-    def _add_variable(self):
-        nums = []
-        for name in self.val_widgets.keys():
-            if name.startswith('val'):
-                try:
-                    nums.append(int(name[3:]))
-                except:
-                    pass
-        next_num = max(nums) + 1 if nums else 1
-        var_name = f"val{next_num}"
-        
-        widget = ConditionVariableWidget(var_name, "", self.get_variables_callback, self)
-        widget.value_changed.connect(self._on_value_changed)
-        widget.delete_requested.connect(self._remove_variable)
-        
-        self.val_widgets[var_name] = widget
-        self.vars_layout_inner.insertWidget(self.vars_layout_inner.count() - 1, widget)
-        self._update_completer_model()
-        self._emit_changed()
-    
-    def _remove_variable(self, var_name: str):
-        if var_name in self.val_widgets:
-            self.val_widgets[var_name].deleteLater()
-            del self.val_widgets[var_name]
-            
-            # Удаляем из условия
-            condition = self.code_editor.toPlainText()
-            import re
-            condition = re.sub(rf'\b{var_name}\b', '', condition)
-            condition = re.sub(r'\s+', ' ', condition).strip()
-            self.code_editor.setPlainText(condition)
-            
-            self._update_completer_model()
-            self._emit_changed()
-    
-    def _on_value_changed(self, var_name: str, value: str):
-        self._emit_changed()
-    
-    def _on_condition_changed(self):
-        self._emit_changed()
-    
-    def _validate(self):
-        condition = self.code_editor.toPlainText().strip()
-        if not condition:
-            self.status_label.setText("⚠️ Empty")
-            self.status_label.setStyleSheet("color: #f39c12; font-size: 9px;")
-            return
-        
-        import re
-        val_vars = re.findall(r'val\d+', condition)
-        
-        try:
-            compile(condition, '<string>', 'eval')
-            if val_vars:
-                self.status_label.setText(f"✅ Valid | Used: {', '.join(set(val_vars))}")
-            else:
-                self.status_label.setText("✅ Valid syntax")
-            self.status_label.setStyleSheet("color: #2ecc71; font-size: 9px;")
-        except SyntaxError as e:
-            self.status_label.setText(f"❌ {str(e).splitlines()[0]}")
-            self.status_label.setStyleSheet("color: #e74c3c; font-size: 9px;")
-    
-    def _emit_changed(self):
-        data = {'variables': {}, 'condition': self.code_editor.toPlainText().strip()}
-        for name, widget in self.val_widgets.items():
-            data['variables'][name] = widget.get_value()
-        
-        self.block.params['condition_data'] = data
-        self.block.params['condition'] = data['condition']
-        for name, value in data['variables'].items():
-            self.block.params[name] = value
-        
-        self.property_changed.emit(data)
-    
-    def load_from_block(self):
-        condition_data = self.block.params.get('condition_data', {})
-        variables = condition_data.get('variables', {})
-        
-        if not variables:
-            for key, value in self.block.params.items():
-                if key.startswith('val') and key[3:].isdigit():
-                    variables[key] = value
-        
-        for var_name, value in variables.items():
-            widget = ConditionVariableWidget(var_name, value, self.get_variables_callback, self)
-            widget.value_changed.connect(self._on_value_changed)
-            widget.delete_requested.connect(self._remove_variable)
-            self.val_widgets[var_name] = widget
-            self.vars_layout_inner.insertWidget(self.vars_layout_inner.count() - 1, widget)
-        
-        if not self.val_widgets:
-            self._add_variable()
-        
-        condition = self.block.params.get('condition', '')
-        if condition_data.get('condition'):
-            condition = condition_data.get('condition', '')
-        self.code_editor.setPlainText(condition)
-        
-        self._update_completer_model()
+            if self._popup:
+                self._popup.hide()
 
 
 class PropertiesEditor(QWidget):
+    """Редактор свойств блоков"""
     
     property_changed = pyqtSignal(int, str, object)
     
@@ -580,7 +571,7 @@ class PropertiesEditor(QWidget):
         super().__init__(parent)
         self.current_block = None
         self.get_variables_callback = get_variables_callback
-        self.if_block_widget = None
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setup_ui()
     
     def setup_ui(self):
@@ -589,14 +580,14 @@ class PropertiesEditor(QWidget):
         layout.setSpacing(0)
         
         self.header = QLabel("📝 PROPERTIES")
-        self.header.setFixedHeight(35)
+        self.header.setFixedHeight(40)
         self.header.setStyleSheet("""
             QLabel {
-                background: #2d2d2d;
+                background-color: #2d2d2d;
                 color: #3d5afe;
                 font-weight: bold;
-                font-size: 11px;
-                padding-left: 12px;
+                font-size: 12px;
+                padding-left: 15px;
                 border-bottom: 1px solid #444;
             }
         """)
@@ -606,32 +597,43 @@ class PropertiesEditor(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("""
             QScrollArea { border: none; background: #252525; }
-            QScrollBar:vertical { background: #252525; width: 8px; }
-            QScrollBar::handle:vertical { background: #444; border-radius: 4px; }
+            QScrollBar:vertical { background: #252525; width: 10px; }
+            QScrollBar::handle:vertical { background: #444; border-radius: 5px; }
         """)
         
         self.container = QWidget()
         self.container.setStyleSheet("background: #252525;")
         self.container_layout = QVBoxLayout(self.container)
-        self.container_layout.setContentsMargins(10, 10, 10, 10)
-        self.container_layout.setSpacing(10)
+        self.container_layout.setContentsMargins(15, 15, 15, 15)
+        self.container_layout.setSpacing(12)
         self.container_layout.addStretch()
         
         scroll.setWidget(self.container)
         layout.addWidget(scroll)
         
         info_panel = QWidget()
-        info_panel.setFixedHeight(40)
+        info_panel.setFixedHeight(50)
         info_panel.setStyleSheet("background: #2d2d2d; border-top: 1px solid #444;")
         info_layout = QHBoxLayout(info_panel)
-        info_layout.setContentsMargins(12, 5, 12, 5)
+        info_layout.setContentsMargins(15, 5, 15, 5)
         
         self.info_label = QLabel("Select a block to edit")
-        self.info_label.setStyleSheet("color: #666; font-size: 10px;")
+        self.info_label.setStyleSheet("color: #666; font-size: 11px;")
         info_layout.addWidget(self.info_label)
         info_layout.addStretch()
         
         layout.addWidget(info_panel)
+    
+    def get_variable_names(self) -> list:
+        if self.get_variables_callback:
+            variables = self.get_variables_callback()
+            return list(variables.keys())
+        return []
+    
+    def get_variables_data(self) -> dict:
+        if self.get_variables_callback:
+            return self.get_variables_callback()
+        return {}
     
     def set_block(self, block):
         self.current_block = block
@@ -646,170 +648,216 @@ class PropertiesEditor(QWidget):
             return
         
         self.header.setText(f"📝 PROPERTIES - {self.current_block.name}")
-        self.info_label.setText(f"Editing: {self.current_block.name}")
+        self.info_label.setText(f"Editing: {self.current_block.name} (ID: {self.current_block.id})")
         
-        if self.current_block.node_type == "if":
-            self.if_block_widget = IfBlockProperties(
-                self.current_block, 
-                self.get_variables_callback,
-                self
-            )
-            self.if_block_widget.property_changed.connect(
-                lambda d: self.property_changed.emit(self.current_block.id, "condition_data", d)
-            )
-            self.container_layout.insertWidget(self.container_layout.count() - 1, self.if_block_widget)
-        else:
-            params = self.current_block.params
-            categories = self._get_categories(self.current_block.node_type)
-            
-            for category, props in categories.items():
-                self._add_category_header(category)
-                for key in props:
-                    if key in params:
-                        self._add_property_row(key, params[key])
+        params = self.current_block.params
+        categories = self.get_categories(self.current_block.node_type)
+        
+        for category, props in categories.items():
+            self.add_category_header(category)
+            for key in props:
+                if key in params:
+                    self.add_property_row(key, params[key])
     
-    def _get_categories(self, node_type: str) -> dict:
+    def get_categories(self, node_type: str) -> dict:
         categories = {
-            "startofwork": {"⚙️": ["projectName", "headless", "timeout"]},
-            "openurl": {"🌐": ["url", "waitStrategy", "timeout"]},
-            "click": {"🖱️": ["selector", "selectorType", "clickCount", "waitAfter"]},
-            "type": {"⌨️": ["selector", "selectorType", "text", "clearFirst", "pressEnter"]},
-            "parsedata": {"📊": ["varName", "saveTo", "extractType", "attributeName"]},
-            "screenshot": {"📸": ["filename", "fullPage", "selector"]},
-            "forloop": {"🔄": ["iterator", "iterableType", "iterable"]},
-            "if": {"⚡": []},
+            "startofwork": {"⚙️ Basic": ["projectName", "headless", "timeout"]},
+            "openurl": {"🌐 Navigation": ["url", "waitStrategy", "timeout"]},
+            "click": {"🖱️ Interaction": ["selector", "selectorType", "clickCount", "waitAfter", "waitForNavigation"]},
+            "type": {"⌨️ Input": ["selector", "selectorType", "text", "clearFirst", "pressEnter", "delay"]},
+            "parsedata": {"📊 Extraction": ["varName", "saveTo", "extractType", "attributeName"]},
+            "screenshot": {"📸 Capture": ["filename", "fullPage", "selector"]},
+            "convertexcel": {"📑 Conversion": ["inputFile", "outputFormat", "outputFile", "sheetName"]},
+            "forloop": {"🔄 Loop": ["iterator", "iterableType", "iterable"]},
+            "if": {"⚡ Condition": ["left", "operator", "right"]},
+            "end": {"⏹️ Close": ["blockType"]},
+            "reload": {"🔄 Page": ["waitAfter", "ignoreCache"]},
+            "sendtelegram": {"📨 Telegram": ["botToken", "chatId", "message", "parseMode"]},
+            "savedata": {"💾 Output": ["dataVar", "format", "outputPath", "overwrite"]},
+            "endsession": {"🏁 Finish": ["saveResults", "closeBrowser", "exportReport"]}
         }
-        return categories.get(node_type, {"📦": list(self.current_block.params.keys()) if self.current_block else []})
+        return categories.get(node_type, {"📦 Properties": list(self.current_block.params.keys()) if self.current_block else []})
     
-    def _add_category_header(self, title: str):
+    def add_category_header(self, title: str):
         label = QLabel(title)
         label.setStyleSheet("""
             QLabel {
                 color: #3d5afe;
                 font-weight: bold;
-                font-size: 10px;
-                padding: 6px 0 2px 0;
+                font-size: 11px;
+                letter-spacing: 1px;
+                padding: 8px 0 4px 0;
                 border-bottom: 1px solid #3d5afe40;
             }
         """)
         self.container_layout.insertWidget(self.container_layout.count() - 1, label)
     
-    def _add_property_row(self, key: str, value):
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 3, 0, 3)
-        layout.setSpacing(8)
-        
-        label = QLabel(self._format_key(key))
-        label.setFixedWidth(100)
-        label.setStyleSheet("color: #ccc; font-size: 10px;")
-        layout.addWidget(label)
-        
-        editor = self._create_editor(key, value)
-        layout.addWidget(editor, 1)
-        
-        self.container_layout.insertWidget(self.container_layout.count() - 1, widget)
-    
-    def _create_editor(self, key: str, value):
-        if isinstance(value, bool):
-            cb = QCheckBox()
-            cb.setChecked(value)
-            cb.stateChanged.connect(lambda s, k=key: self._on_change(k, s == Qt.CheckState.Checked))
-            return cb
-        
-        if isinstance(value, int):
-            spin = QSpinBox()
-            spin.setRange(-999999, 999999)
-            spin.setValue(value)
-            spin.valueChanged.connect(lambda v, k=key: self._on_change(k, v))
-            self._style_editor(spin)
-            return spin
-        
-        if key in ["url", "selector", "varName", "iterable"]:
-            combo = SearchableComboBox()
-            vars_data = self.get_variables_callback() if self.get_variables_callback else {}
-            filter_type = "url" if "url" in key.lower() else "selector"
-            filtered = self._get_filtered_vars(filter_type)
-            if filtered:
-                combo.set_items(filtered, vars_data)
-            combo.setCurrentText(str(value))
-            combo.currentTextChanged.connect(lambda v, k=key: self._on_change(k, combo.get_actual_value()))
-            self._style_editor(combo)
-            return combo
-        
-        if key in ["waitStrategy", "selectorType", "iterableType", "operator"]:
-            options = {
-                "waitStrategy": ["load", "domcontentloaded", "networkidle"],
-                "selectorType": ["css", "xpath"],
-                "iterableType": ["list", "range", "variable"],
-                "operator": ["eq", "ne", "gt", "lt", "contains", "startswith", "endswith"]
-            }
-            combo = QComboBox()
-            combo.addItems(options.get(key, []))
-            combo.setCurrentText(str(value))
-            combo.currentTextChanged.connect(lambda v, k=key: self._on_change(k, v))
-            self._style_editor(combo)
-            return combo
-        
-        editor = QLineEdit(str(value))
-        editor.textChanged.connect(lambda v, k=key: self._on_change(k, v))
-        self._style_editor(editor)
-        return editor
-    
-    def _style_editor(self, widget):
-        widget.setStyleSheet("""
-            QLineEdit, QSpinBox, QComboBox {
-                background: #3a3a3a;
-                color: #ddd;
-                border: 1px solid #555;
-                border-radius: 3px;
-                padding: 4px 6px;
-                font-size: 10px;
-            }
-            QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
-                border: 1px solid #3d5afe;
-            }
-        """)
-    
-    def _on_change(self, key: str, value):
-        if self.current_block:
-            self.current_block.params[key] = value
-            self.property_changed.emit(self.current_block.id, key, value)
-    
-    def _format_key(self, key: str) -> str:
-        names = {
-            "projectName": "Project", "headless": "Headless", "timeout": "Timeout",
-            "url": "URL", "waitStrategy": "Wait", "selector": "Selector",
-            "selectorType": "Type", "clickCount": "Clicks", "waitAfter": "Wait (ms)",
-            "text": "Text", "clearFirst": "Clear", "pressEnter": "Enter",
-            "varName": "Var name", "saveTo": "Save to", "extractType": "Extract",
-            "attributeName": "Attribute", "filename": "File", "fullPage": "Full page",
-            "iterator": "Iterator", "iterableType": "Type", "iterable": "Iterable"
-        }
-        return names.get(key, key.replace("_", " ").title())
-    
-    def _get_filtered_vars(self, filter_type: str) -> list:
-        if not self.get_variables_callback:
-            return []
-        vars_data = self.get_variables_callback()
-        if filter_type == "url":
-            seen = set()
-            result = []
-            for name, data in vars_data.items():
-                url = data.get('url', '').strip()
-                if url and url not in seen:
-                    seen.add(url)
-                    display = url[:50] + "..." if len(url) > 50 else url
-                    result.append((display, name))
-            return result
-        else:
-            return [(name, name) for name, data in vars_data.items() if data.get('selector', '').strip()]
-    
     def clear(self):
-        if self.if_block_widget:
-            self.if_block_widget.deleteLater()
-            self.if_block_widget = None
         while self.container_layout.count() > 1:
             item = self.container_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+    
+    def add_property_row(self, key: str, value):
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(12)
+        
+        label = QLabel(self.format_key(key))
+        label.setFixedWidth(110)
+        label.setStyleSheet("color: #ccc; font-size: 11px; font-weight: 500;")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        
+        editor = self.create_editor(key, value)
+        layout.addWidget(editor, 1)
+        
+        type_icon = self.get_type_icon(value)
+        if type_icon:
+            icon_label = QLabel(type_icon)
+            icon_label.setStyleSheet("color: #666; font-size: 12px;")
+            layout.addWidget(icon_label)
+        
+        self.container_layout.insertWidget(self.container_layout.count() - 1, widget)
+    
+    def create_editor(self, key: str, value):
+        variable_fields = ["url", "selector", "varName", "iterable", "left", "right", "dataVar"]
+        
+        if isinstance(value, bool):
+            editor = QCheckBox()
+            editor.setChecked(value)
+            editor.stateChanged.connect(lambda state, k=key: self.on_change(k, state == Qt.CheckState.Checked))
+            return editor
+        
+        if isinstance(value, int):
+            editor = QSpinBox()
+            editor.setRange(-999999, 999999)
+            editor.setValue(value)
+            editor.valueChanged.connect(lambda v, k=key: self.on_change(k, v))
+            self.style_editor(editor)
+            return editor
+        
+        if isinstance(value, float):
+            editor = QDoubleSpinBox()
+            editor.setRange(-999999, 999999)
+            editor.setDecimals(2)
+            editor.setValue(value)
+            editor.valueChanged.connect(lambda v, k=key: self.on_change(k, v))
+            self.style_editor(editor)
+            return editor
+        
+        if key in variable_fields and self.current_block:
+            editor = SearchableComboBox()
+            variable_names = self.get_variable_names()
+            variables_data = self.get_variables_data()
+            
+            if variable_names:
+                editor.set_items(variable_names, variables_data)
+                editor.set_completion_words(variable_names, variables_data)
+            
+            current_value = str(value) if value else ""
+            editor.setCurrentText(current_value)
+            editor.currentTextChanged.connect(lambda v, k=key: self.on_combo_change(k, v, editor))
+            return editor
+        
+        if key in ["text", "message", "filename", "projectName"]:
+            editor = CompleterLineEdit()
+            editor.setText(str(value))
+            editor.textChanged.connect(lambda v, k=key: self.on_change(k, v))
+            variable_names = self.get_variable_names()
+            variables_data = self.get_variables_data()
+            editor.set_completion_words(variable_names, variables_data)
+            self.style_editor(editor)
+            return editor
+        
+        if key in ["waitStrategy", "selectorType", "iterableType", "operator", "blockType", "parseMode", "outputFormat", "format", "extractType"]:
+            return self.create_dropdown(key, value)
+        
+        editor = QLineEdit(str(value))
+        editor.textChanged.connect(lambda v, k=key: self.on_change(k, v))
+        self.style_editor(editor)
+        return editor
+    
+    def on_combo_change(self, key: str, display_text: str, combo: SearchableComboBox):
+        self.on_change(key, combo.get_actual_value())
+    
+    def create_dropdown(self, key: str, current_value) -> QComboBox:
+        options = {
+            "waitStrategy": ["domcontentloaded", "load", "networkidle"],
+            "selectorType": ["css", "xpath"],
+            "iterableType": ["list", "range", "variable"],
+            "operator": ["contains", "endswith", "eq", "gt", "lt", "ne", "startswith"],
+            "blockType": ["if", "loop"],
+            "parseMode": ["", "HTML", "MarkdownV2"],
+            "outputFormat": ["csv", "excel", "json", "sqlite"],
+            "format": ["csv", "excel", "json", "sqlite"],
+            "extractType": ["attribute", "html", "text"]
+        }
+        
+        editor = QComboBox()
+        items = options.get(key, [])
+        editor.addItems(items)
+        current = str(current_value) if current_value else items[0] if items else ""
+        editor.setCurrentText(current)
+        editor.currentTextChanged.connect(lambda v, k=key: self.on_change(k, v))
+        self.style_editor(editor)
+        return editor
+    
+    def style_editor(self, widget):
+        widget.setStyleSheet("""
+            QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+                background-color: #3a3a3a;
+                color: #ddd;
+                border: 1px solid #555;
+                border-radius: 4px;
+                padding: 6px 8px;
+                font-size: 11px;
+            }
+            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
+                border: 1px solid #3d5afe;
+            }
+            QSpinBox::up-button, QSpinBox::down-button { background-color: #555; width: 20px; }
+            QComboBox::drop-down { border: none; width: 24px; }
+            QComboBox::down-arrow {
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #aaa;
+                margin-right: 8px;
+            }
+        """)
+    
+    def get_type_icon(self, value) -> str:
+        if isinstance(value, bool): return "✓/✗"
+        if isinstance(value, int): return "123"
+        if isinstance(value, float): return "1.0"
+        if isinstance(value, str):
+            if value.startswith("{{") and value.endswith("}}"): return "🔗"
+            if "://" in value: return "🌐"
+            return "📝"
+        return ""
+    
+    def on_change(self, key: str, value):
+        if self.current_block:
+            self.current_block.params[key] = value
+            self.property_changed.emit(self.current_block.id, key, value)
+    
+    def format_key(self, key: str) -> str:
+        names = {
+            "projectName": "Project Name", "headless": "Headless Mode", "timeout": "Timeout (s)",
+            "url": "URL", "waitStrategy": "Wait Strategy", "selector": "Selector",
+            "selectorType": "Selector Type", "clickCount": "Click Count", "waitAfter": "Wait After (ms)",
+            "waitForNavigation": "Wait for Navigation", "text": "Text", "clearFirst": "Clear First",
+            "pressEnter": "Press Enter", "delay": "Delay (ms)", "varName": "Variable Name",
+            "saveTo": "Save To", "extractType": "Extract Type", "attributeName": "Attribute Name",
+            "filename": "Filename", "fullPage": "Full Page", "inputFile": "Input File",
+            "outputFormat": "Output Format", "outputFile": "Output File", "sheetName": "Sheet Name",
+            "iterator": "Iterator", "iterableType": "Iterable Type", "iterable": "Iterable",
+            "left": "Left Operand", "operator": "Operator", "right": "Right Operand",
+            "blockType": "Block Type", "ignoreCache": "Ignore Cache", "botToken": "Bot Token",
+            "chatId": "Chat ID", "message": "Message", "parseMode": "Parse Mode",
+            "dataVar": "Data Variable", "format": "Output Format", "outputPath": "Output Path",
+            "overwrite": "Overwrite", "saveResults": "Save Results", "closeBrowser": "Close Browser",
+            "exportReport": "Export Report"
+        }
+        return names.get(key, key.replace("_", " ").title())

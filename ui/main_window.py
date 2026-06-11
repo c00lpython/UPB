@@ -62,7 +62,208 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.bottom_frame)
         
         self.log("UPB Ready | Select mode: OFF")
-    
+
+    def view_variable_in_browser(self, url: str, xpath: str):
+        """Открывает URL в новой вкладке и выделяет элемент по XPath"""
+        print(f"\n{'='*60}")
+        print(f"🌐 [View in Browser] Запрос на открытие")
+        print(f"   URL: {url}")
+        print(f"   XPath: {xpath}")
+        print(f"{'='*60}\n")
+        
+        if not hasattr(self, 'browser_widget') or not self.browser_widget:
+            self.log("❌ Browser not available")
+            QMessageBox.warning(self, "No Browser", "Browser widget is not available!")
+            return
+        
+        if not url:
+            self.log("❌ No URL for this variable")
+            QMessageBox.warning(self, "No URL", "This variable has no URL defined!")
+            return
+        
+        try:
+            tab = self.browser_widget.add_new_tab(url)
+            
+            if tab and xpath:
+                safe_xpath = xpath.replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
+                
+                js_code = f"""
+                (function() {{
+                    try {{
+                        // Убираем предыдущие подсветки
+                        document.querySelectorAll('.upb-overlay, .upb-corner, .upb-label, .upb-margin, .upb-padding').forEach(el => el.remove());
+                        
+                        // Ищем элемент по XPath
+                        let xpath = "{safe_xpath}";
+                        let result = document.evaluate(xpath, document, null, 
+                            XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                        let element = result.singleNodeValue;
+                        
+                        if (!element) {{
+                            console.log('%c❌ UPB: Element not found', 'color: #ff0000; font-weight: bold;');
+                            return '❌ Element not found';
+                        }}
+                        
+                        // Скроллим к элементу
+                        element.scrollIntoView({{behavior: 'smooth', block: 'center', inline: 'center'}});
+                        
+                        // Получаем размеры и позицию элемента
+                        let rect = element.getBoundingClientRect();
+                        let top = rect.top + window.scrollY;
+                        let left = rect.left + window.scrollX;
+                        let width = rect.width;
+                        let height = rect.height;
+                        
+                        // Создаём оверлей (полупрозрачная заливка)
+                        let overlay = document.createElement('div');
+                        overlay.className = 'upb-overlay';
+                        overlay.style.cssText = `
+                            position: absolute;
+                            top: ${{top}}px;
+                            left: ${{left}}px;
+                            width: ${{width}}px;
+                            height: ${{height}}px;
+                            background: rgba(0, 120, 212, 0.1);
+                            pointer-events: none;
+                            z-index: 999998;
+                            transition: all 0.2s ease;
+                        `;
+                        document.body.appendChild(overlay);
+                        
+                        // Функция создания уголка
+                        function createCorner(x, y, rotate) {{
+                            let corner = document.createElement('div');
+                            corner.className = 'upb-corner';
+                            corner.style.cssText = `
+                                position: absolute;
+                                top: ${{y}}px;
+                                left: ${{x}}px;
+                                width: 12px;
+                                height: 12px;
+                                border: 2px solid #0078d4;
+                                background: transparent;
+                                pointer-events: none;
+                                z-index: 999999;
+                                transform: rotate(${{rotate}}deg);
+                                transition: all 0.2s ease;
+                            `;
+                            document.body.appendChild(corner);
+                            return corner;
+                        }}
+                        
+                        // 4 уголка
+                        createCorner(left - 6, top - 6, 0);      //左上
+                        createCorner(left + width - 6, top - 6, 90);   //右上
+                        createCorner(left + width - 6, top + height - 6, 180); //右下
+                        createCorner(left - 6, top + height - 6, 270);  //左下
+                        
+                        // Метка UPB
+                        let label = document.createElement('div');
+                        label.className = 'upb-label';
+                        label.style.cssText = `
+                            position: absolute;
+                            top: ${{top - 30}}px;
+                            left: ${{left}}px;
+                            background: #0078d4;
+                            color: white;
+                            padding: 3px 10px;
+                            font-size: 11px;
+                            font-weight: bold;
+                            font-family: 'Segoe UI', Arial, sans-serif;
+                            border-radius: 3px;
+                            pointer-events: none;
+                            z-index: 999999;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                            letter-spacing: 1px;
+                        `;
+                        label.textContent = '🎯 UPB • ' + element.tagName.toLowerCase();
+                        document.body.appendChild(label);
+                        
+                        // Пульсация уголков
+                        let pulseCount = 0;
+                        let pulseInterval = setInterval(() => {{
+                            let color = pulseCount % 2 === 0 ? '#ff8800' : '#0078d4';
+                            document.querySelectorAll('.upb-corner').forEach(c => {{
+                                c.style.borderColor = color;
+                            }});
+                            pulseCount++;
+                            if (pulseCount >= 6) {{
+                                clearInterval(pulseInterval);
+                                document.querySelectorAll('.upb-corner').forEach(c => {{
+                                    c.style.borderColor = '#0078d4';
+                                }});
+                            }}
+                        }}, 500);
+                        
+                        // Клик для снятия
+                        document.addEventListener('click', function cleanup(e) {{
+                            document.querySelectorAll('.upb-overlay, .upb-corner, .upb-label').forEach(el => el.remove());
+                            document.removeEventListener('click', cleanup);
+                            clearInterval(pulseInterval);
+                        }}, {{once: true}});
+                        
+                        // Обновление при скролле/ресайзе
+                        function updatePosition() {{
+                            let newRect = element.getBoundingClientRect();
+                            overlay.style.top = (newRect.top + window.scrollY) + 'px';
+                            overlay.style.left = (newRect.left + window.scrollX) + 'px';
+                            overlay.style.width = newRect.width + 'px';
+                            overlay.style.height = newRect.height + 'px';
+                            
+                            let corners = document.querySelectorAll('.upb-corner');
+                            if (corners.length === 4) {{
+                                corners[0].style.top = (newRect.top + window.scrollY - 6) + 'px';
+                                corners[0].style.left = (newRect.left + window.scrollX - 6) + 'px';
+                                corners[1].style.top = (newRect.top + window.scrollY - 6) + 'px';
+                                corners[1].style.left = (newRect.left + window.scrollX + newRect.width - 6) + 'px';
+                                corners[2].style.top = (newRect.top + window.scrollY + newRect.height - 6) + 'px';
+                                corners[2].style.left = (newRect.left + window.scrollX + newRect.width - 6) + 'px';
+                                corners[3].style.top = (newRect.top + window.scrollY + newRect.height - 6) + 'px';
+                                corners[3].style.left = (newRect.left + window.scrollX - 6) + 'px';
+                            }}
+                            
+                            label.style.top = (newRect.top + window.scrollY - 30) + 'px';
+                            label.style.left = (newRect.left + window.scrollX) + 'px';
+                        }}
+                        
+                        window.addEventListener('scroll', updatePosition, {{passive: true}});
+                        window.addEventListener('resize', updatePosition, {{passive: true}});
+                        
+                        // Сохраняем ссылки для очистки
+                        window._upb_cleanup = () => {{
+                            document.querySelectorAll('.upb-overlay, .upb-corner, .upb-label').forEach(el => el.remove());
+                            window.removeEventListener('scroll', updatePosition);
+                            window.removeEventListener('resize', updatePosition);
+                        }};
+                        
+                        console.log('%c✅ UPB: Element highlighted %c' + element.tagName, 
+                            'color: #00ff00; font-weight: bold;', 'color: #fff;');
+                        
+                        return '✅ Element highlighted: ' + element.tagName;
+                        
+                    }} catch(e) {{
+                        console.error('❌ UPB Error:', e.message);
+                        return '❌ Error: ' + e.message;
+                    }}
+                }})();
+                """
+                
+                def highlight_on_load(ok):
+                    if ok:
+                        tab.site_view.page().runJavaScript(js_code, 
+                            lambda result: print(f"🔍 {result}"))
+                        self.log(f"🎯 Element highlighted with corner overlay")
+                
+                tab.site_view.loadFinished.connect(highlight_on_load)
+            
+            self.log(f"🌐 Opened new tab: {url[:60]}...")
+            self.switch_tab(0)
+            
+        except Exception as e:
+            self.log(f"❌ Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
     def create_top_bar(self):
         self.top_bar = QFrame()
         self.top_bar.setMaximumHeight(40)
@@ -841,6 +1042,7 @@ chat_id =
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
         self.vm_table = VmTable()
+        self.vm_table.view_in_browser_requested.connect(self.view_variable_in_browser)
         layout.addWidget(self.vm_table)
         return widget
 
