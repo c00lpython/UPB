@@ -2,35 +2,59 @@
 
 **No-Code конструктор парсеров с кастомным браузером и визуальным редактором**
 
-## 🎯 Фичи
+![UPB Screenshot](https://img.shields.io/badge/version-1.0-blue)
+![Python](https://img.shields.io/badge/python-3.10+-blue)
+![PyQt6](https://img.shields.io/badge/PyQt6-latest-green)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-### 1. Browser
+## 🎯 Возможности
+
+### 🌐 Browser
 - 📌 **Режим SELECT** — один клик для изъятия переменных (XPath + URL + пример текста)
-- 🔒 **Отдельные профили** для каждого проекта — логины изолированы друг от друга
-- 📑 **Много вкладок** — сохраняются в память проекта
-- 🛠️ **DevTools справа** — обновляется, можно скрыть
+- 🔒 **Отдельные профили** для каждого проекта — куки и логины изолированы
+- 📑 **Много вкладок** с сохранением в память проекта
+- 🛠️ **DevTools** справа (Chrome DevTools) — можно скрыть
+- 🔍 **View in Browser** — подсветка элементов на странице из VM таблицы
 
-### 2. Project
-- ⚡ **Быстрое создание** проектов в нужную папку
-- 🔄 **Подгрузка сессий**, вкладок, логинов и переменных
-- 👁️ **Preview переменных** и статистика
+### 📁 Project Manager
+- ⚡ **Быстрое создание** проектов
+- 🔄 **Авто-открытие** последнего проекта при запуске
+- 💾 **Сохранение сессий**: вкладки, логины, куки, переменные
+- 👁️ **Preview переменных** и статистика проекта
 
-### 3. VM (Variable Manager)
-- 📊 **Таблица с редактированием** данных прямо в ней
-- 💾 **Кастом экспорт** данных в таблицу
+### 📊 VM (Variable Manager)
+- 📋 **Таблица с редактированием**: Name, XPath/CSS, Type, URL, Sample Text
+- 🔍 **Поиск и фильтрация** по всем колонкам
+- 🖱️ **Контекстное меню**: View in Browser, Copy, Delete
+- 📤 **Импорт из Select** режима браузера
+- 💾 **Экспорт** в Excel (variables.xlsx)
 
-### 4. SE (Script Editor)
-- 🧩 **Нод-редактор** — как LEGO для скриптов парсера
-- ✏️ **Property Editor** — редактирование свойств нода с сортировкой
-- 🔧 **Компилятор** в script.txt
+### 🧩 SE (Script Editor)
+- 🎨 **Визуальный нод-редактор** — drag & drop блоков
+- 🔌 **Соединения** между блоками с разными типами портов
+- ✏️ **Property Editor** с IntelliSense для переменных
+- 🔀 **IfBlock** с true/false ветками
+- ⌨️ **IntelliSense** — автодополнение переменных и ключей доступа (Name, XPath, URL, Sample)
+- 🏗️ **Компилятор** в script.txt
 
-### 5. Build (в разработке)
-- 🏗️ Будет компоновать таблицы, скрипт и данные проекта
-- ⚙️ Создание парсера со своими настройками (config.conf)
+### 🚀 Build & Export (в разработке)
+- ⚙️ Генерация parser config (config.conf)
+- 📦 Упаковка проекта для UPBParser
 
-## 🚀 Быстрый старт
+## 📦 Установка
 
 ```bash
+# Клонируем репозиторий
+git clone https://github.com/LightWorker228/UPB.git
+cd UPB
+
+# Создаём виртуальное окружение
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # Linux/Mac
+
+# Устанавливаем зависимости
 pip install -r requirements.txt
-playwright install chromium
+
+# Запускаем
 python main.py
