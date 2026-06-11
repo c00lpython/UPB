@@ -18,10 +18,48 @@ class ProjectManager(QObject):
         self.current_project = None
         self.current_profile = None
         self.projects_dir = os.path.join(os.getcwd(), "projects")
+        self.latest_project_file = os.path.join(os.getcwd(), "latest_project.txt")
         
         if not os.path.exists(self.projects_dir):
             os.makedirs(self.projects_dir)
+
+        self._cleanup_temp_profiles()
     
+    def _cleanup_temp_profiles(self):
+        """Очищает все временные профили браузера"""
+        temp_pattern = "temp_profile_"
+        cwd = os.getcwd()
+        for item in os.listdir(cwd):
+            item_path = os.path.join(cwd, item)
+            if item.startswith(temp_pattern) and os.path.isdir(item_path):
+                try:
+                    shutil.rmtree(item_path, ignore_errors=True)
+                except:
+                    pass
+
+    def save_latest_project(self, project_name: str):
+        """Сохраняет последний открытый проект"""
+        try:
+            with open(self.latest_project_file, 'w', encoding='utf-8') as f:
+                f.write(f"LatestProject = {project_name}\n")
+        except:
+            pass
+
+    def get_latest_project(self) -> str:
+        """Возвращает имя последнего открытого проекта"""
+        try:
+            if os.path.exists(self.latest_project_file):
+                with open(self.latest_project_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.startswith("LatestProject = "):
+                            project_name = line.split(" = ", 1)[1].strip()
+                            project_path = os.path.join(self.projects_dir, project_name)
+                            if os.path.exists(project_path):
+                                return project_name
+        except:
+            pass
+        return None
+
     def get_all_projects(self):
         projects = []
         if os.path.exists(self.projects_dir):
@@ -109,7 +147,7 @@ timeout = 10
         
         self.current_project = name
         self.current_profile = self._get_profile_for_project(name)
-        
+        self.save_latest_project(name)
         return True, {"path": project_path, "profile": self.current_profile}
     
     def load_project(self, name: str):
@@ -154,7 +192,7 @@ timeout = 10
         
         self.current_project = name
         self.current_profile = self._get_profile_for_project(name)
-        
+        self.save_latest_project(name)
         return {
             "metadata": metadata,
             "variables": variables,
@@ -199,7 +237,7 @@ timeout = 10
             ])
         
         wb.save(os.path.join(project_path, "variables.xlsx"))
-        
+        self.save_latest_project(name)
         return True, "Project saved"
     
     def delete_project(self, name: str):

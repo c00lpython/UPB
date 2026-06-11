@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QListWidget, QListWidgetItem, QLineEdit,
     QTextEdit, QGroupBox, QGridLayout, QMessageBox, QInputDialog
 )
-from PyQt6.QtCore import Qt, QDateTime, QUrl
+from PyQt6.QtCore import Qt, QDateTime, QUrl, QTimer
 from PyQt6.QtGui import QKeyEvent
 from ui.browser_widget import BrowserWidget
 from ui.vm_table import VmTable
@@ -60,9 +60,33 @@ class MainWindow(QMainWindow):
         
         self.create_bottom_panel()
         main_layout.addWidget(self.bottom_frame)
+        self.log("UPB Ready | Select mode: OFF")
+        
+        self._browser_ready = False
+        QTimer.singleShot(500, self._set_browser_ready)
+        QTimer.singleShot(2000, self.auto_open_latest_project)
         
         self.log("UPB Ready | Select mode: OFF")
 
+    def _set_browser_ready(self):
+        self._browser_ready = True
+    
+    def auto_open_latest_project(self):
+        if not self._browser_ready:
+            QTimer.singleShot(500, self.auto_open_latest_project)
+            return
+        last_project = self.project_manager.get_latest_project()
+        if not last_project:
+            return
+        for i in range(self.project_list.count()):
+            item = self.project_list.item(i)
+            project_name = item.text().replace("📂  ", "")
+            if project_name == last_project:
+                self.project_list.setCurrentRow(i)
+                self.on_open_project()
+                self.log(f"📂 Auto-opened: {last_project}")
+                return
+            
     def view_variable_in_browser(self, url: str, xpath: str):
         """Открывает URL в новой вкладке и выделяет элемент по XPath"""
         print(f"\n{'='*60}")
@@ -777,19 +801,24 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", f"Failed to save project: {result}")
 
     def _replace_browser_widget(self, new_browser_widget):
-        browser_tab_index = 0
-        browser_tab_widget = self.content_stack.widget(browser_tab_index)
-        splitter = browser_tab_widget.findChild(QSplitter)
-        
-        if splitter:
-            old_browser = splitter.widget(0)
-            if old_browser and hasattr(old_browser, 'cleanup'):
-                old_browser.cleanup()
-            splitter.insertWidget(0, new_browser_widget)
-            if old_browser:
-                old_browser.deleteLater()
-        
-        self.browser_widget = new_browser_widget
+        try:
+            browser_tab_index = 0
+            browser_tab_widget = self.content_stack.widget(browser_tab_index)
+            splitter = browser_tab_widget.findChild(QSplitter)
+            if splitter:
+                old_browser = splitter.widget(0)
+                if old_browser and hasattr(old_browser, 'cleanup'):
+                    try:
+                        old_browser.cleanup()
+                    except:
+                        pass
+                splitter.insertWidget(0, new_browser_widget)
+                if old_browser:
+                    old_browser.hide()
+                    QTimer.singleShot(100, old_browser.deleteLater)
+            self.browser_widget = new_browser_widget
+        except Exception as e:
+            print(f"⚠️ [REPLACE BROWSER] Error: {e}")
 
     def on_open_project(self):
         current = self.project_list.currentItem()
