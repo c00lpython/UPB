@@ -1076,22 +1076,10 @@ chat_id =
         return widget
 
     def create_build_panel(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        info_label = QLabel("🔧 Build Configuration\n\n"
-                           "• Click 'Build' to generate parser config\n"
-                           "• Config will be saved to project folder\n"
-                           "• Use UPBParser to run the parser\n\n"
-                           "📌 Parser settings:\n"
-                           "• Variables from VM table\n"
-                           "• Current URL from browser\n"
-                           "• Output format: Excel")
-        info_label.setStyleSheet("color: #cccccc; font-size: 14px; padding: 20px;")
-        info_label.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(info_label)
-        
-        return widget
+        from ui.build_widget import BuildWidget
+        self.build_widget = BuildWidget(self)
+        self.build_widget.log_signal.connect(self.log)
+        return self.build_widget
 
     def create_test_panel(self):
         widget = QWidget()

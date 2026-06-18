@@ -1,0 +1,62 @@
+# UPB Parser — TODO List
+
+## ✅ Готово
+
+### Core
+- [x] Parser Engine (parser.py) — CloakBrowser, humanize=True
+- [x] Shell Processor (main.py) — чтение script.txt, выполнение команд
+- [x] Data Storage (output_handler.py) — Excel, CSV, JSON, Plotly
+- [x] Database (db_handler.py) — SQLite, users + user_results
+- [x] Telegram Bot (bot.py + bot_main.py) — регистрация, логин, результаты
+
+### Features
+- [x] Поддержка `--user` в script.txt
+- [x] Персональные папки `results/user_{id}/`
+- [x] Скролл до конца (scroll_to_bottom)
+- [x] Эмуляция человека (humanize=True)
+- [x] Telegram уведомления о завершении
+- [x] Просмотр и скачивание файлов через бота
+
+### Documentation
+- [x] README.md
+- [x] HOWITWORKS.md
+
+---
+
+## 🔜 В планах
+
+### Parser
+- [ ] Пагинация (переход по страницам)
+- [ ] Поддержка прокси (ротация IP)
+- [ ] Поддержка капч (2Captcha, CapSolver)
+- [ ] Больше форматов вывода (Parquet, SQLite)
+- [ ] Планировщик (запуск по расписанию)
+
+### Telegram Bot
+- [ ] Удаление файлов через бота
+- [ ] Экспорт данных в Google Sheets
+- [ ] Уведомления об ошибках
+- [ ] Поддержка групп
+
+### Infrastructure
+- [ ] Docker контейнер
+- [ ] CI/CD (GitHub Actions)
+- [ ] Логирование в Sentry/ELK
+- [ ] Система обновлений (auto-update)
+
+---
+
+## 🐛 Баги
+
+- [ ] Telegram таймаут при медленном интернете
+- [ ] Улучшить обработку ошибок в CloakBrowser
+- [ ] Проверить работу на Linux (WSL)
+
+---
+
+## 📝 Примечания
+
+- CloakBrowser скачивается автоматически при первом запуске (~200 МБ)
+- Бот требует токен от @BotFather
+- Данные хранятся в SQLite (`data/users.db`)
+- Все результаты в `results/user_{id}/`

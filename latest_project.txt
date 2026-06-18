@@ -1,1 +1,1 @@
-LatestProject = Avito
+LatestProject = empty

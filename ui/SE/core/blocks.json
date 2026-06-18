@@ -1,0 +1,167 @@
+{
+  "version": "1.0",
+  "blocks": {
+    "startofwork": {
+      "name": "Start Session",
+      "description": "Initialize browser session",
+      "category": "browser",
+      "handler": "parser._start_session",
+      "params": {
+        "projectName": {"type": "string", "default": "", "description": "Project name"},
+        "headless": {"type": "boolean", "default": true, "description": "Run headless"},
+        "timeout": {"type": "integer", "default": 30, "description": "Timeout in seconds"},
+        "--user": {"type": "string", "default": "", "description": "Username for DB binding"}
+      }
+    },
+    "openurl": {
+      "name": "Open URL",
+      "description": "Navigate to URL",
+      "category": "browser",
+      "handler": "parser._open_url",
+      "params": {
+        "url": {"type": "string", "default": "", "description": "URL to open"},
+        "waitStrategy": {"type": "string", "default": "load", "enum": ["load", "domcontentloaded", "networkidle"]},
+        "timeout": {"type": "integer", "default": 30000, "description": "Timeout in ms"}
+      }
+    },
+    "click": {
+      "name": "Click",
+      "description": "Click on element",
+      "category": "interaction",
+      "handler": "parser._click",
+      "params": {
+        "selector": {"type": "string", "default": "", "description": "CSS or XPath selector"},
+        "selectorType": {"type": "string", "default": "css", "enum": ["css", "xpath", "text"]},
+        "clickCount": {"type": "integer", "default": 1},
+        "waitAfter": {"type": "integer", "default": 1000, "description": "Wait after click in ms"}
+      }
+    },
+    "type": {
+      "name": "Type Text",
+      "description": "Type text into input field",
+      "category": "interaction",
+      "handler": "parser._type_text",
+      "params": {
+        "selector": {"type": "string", "default": ""},
+        "selectorType": {"type": "string", "default": "css"},
+        "text": {"type": "string", "default": ""},
+        "clearFirst": {"type": "boolean", "default": true},
+        "pressEnter": {"type": "boolean", "default": false},
+        "delay": {"type": "integer", "default": 0, "description": "Delay between keystrokes in ms"}
+      }
+    },
+    "parsedata": {
+      "name": "Parse Data",
+      "description": "Extract data from page",
+      "category": "extraction",
+      "handler": "parser._parse_data",
+      "params": {
+        "varName": {"type": "string", "default": "", "description": "CSS selector or variable name"},
+        "saveTo": {"type": "string", "default": "result", "description": "Save to variable"},
+        "extractType": {"type": "string", "default": "text", "enum": ["text", "html", "attribute"]},
+        "attributeName": {"type": "string", "default": "", "description": "Attribute name for extractType=attribute"}
+      }
+    },
+    "screenshot": {
+      "name": "Screenshot",
+      "description": "Take screenshot",
+      "category": "output",
+      "handler": "parser._screenshot",
+      "params": {
+        "filename": {"type": "string", "default": "screenshot.png"},
+        "fullPage": {"type": "boolean", "default": false},
+        "selector": {"type": "string", "default": ""}
+      }
+    },
+    "convertexcel": {
+      "name": "Convert Excel",
+      "description": "Convert Excel to other format",
+      "category": "data",
+      "handler": "output_handler.convert_excel",
+      "params": {
+        "inputFile": {"type": "string", "default": ""},
+        "outputFormat": {"type": "string", "default": "csv", "enum": ["csv", "json", "html", "excel"]},
+        "outputFile": {"type": "string", "default": ""},
+        "sheetName": {"type": "string", "default": "Sheet1"}
+      }
+    },
+    "forloop": {
+      "name": "For Loop",
+      "description": "Loop over items",
+      "category": "control",
+      "handler": "control._for_loop",
+      "params": {
+        "iterator": {"type": "string", "default": "item"},
+        "iterableType": {"type": "string", "default": "variable", "enum": ["variable", "range", "list"]},
+        "iterable": {"type": "string", "default": ""}
+      }
+    },
+    "if": {
+      "name": "Condition",
+      "description": "Conditional execution",
+      "category": "control",
+      "handler": "control._if",
+      "params": {
+        "left": {"type": "string", "default": ""},
+        "operator": {"type": "string", "default": "eq", "enum": ["eq", "ne", "gt", "lt", "contains"]},
+        "right": {"type": "string", "default": ""},
+        "true_next": {"type": "string", "default": ""},
+        "false_next": {"type": "string", "default": ""}
+      }
+    },
+    "end": {
+      "name": "End Block",
+      "description": "End of loop or condition",
+      "category": "control",
+      "handler": "control._end",
+      "params": {
+        "blockType": {"type": "string", "default": "loop", "enum": ["loop", "if"]}
+      }
+    },
+    "reload": {
+      "name": "Reload Page",
+      "description": "Reload current page",
+      "category": "browser",
+      "handler": "parser._reload_page",
+      "params": {
+        "waitAfter": {"type": "integer", "default": 2000, "description": "Wait after reload in ms"},
+        "ignoreCache": {"type": "boolean", "default": true}
+      }
+    },
+    "sendtelegram": {
+      "name": "Send Telegram",
+      "description": "Send message to Telegram",
+      "category": "notification",
+      "handler": "net_handler.send_telegram_message",
+      "params": {
+        "botToken": {"type": "string", "default": ""},
+        "chatId": {"type": "string", "default": ""},
+        "message": {"type": "string", "default": ""},
+        "parseMode": {"type": "string", "default": "", "enum": ["", "HTML", "MarkdownV2"]}
+      }
+    },
+    "savedata": {
+      "name": "Save Data",
+      "description": "Save extracted data to file",
+      "category": "data",
+      "handler": "output_handler.save_results",
+      "params": {
+        "dataVar": {"type": "string", "default": "", "description": "Variable with data"},
+        "format": {"type": "string", "default": "excel", "enum": ["excel", "csv", "json", "plotly"]},
+        "outputPath": {"type": "string", "default": "./output"},
+        "overwrite": {"type": "boolean", "default": true}
+      }
+    },
+    "endsession": {
+      "name": "End Session",
+      "description": "Close browser and save results",
+      "category": "browser",
+      "handler": "parser._end_session",
+      "params": {
+        "saveResults": {"type": "boolean", "default": true},
+        "closeBrowser": {"type": "boolean", "default": true},
+        "exportReport": {"type": "boolean", "default": false}
+      }
+    }
+  }
+}
