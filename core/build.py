@@ -6,18 +6,18 @@ import json
 import shutil
 import subprocess
 import time
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextEdit, QGroupBox, QGridLayout,
     QLineEdit, QCheckBox, QComboBox, QSpinBox,
     QMessageBox, QProgressBar
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QDateTime
 
 
 class BuildWorker(QThread):
-    log_signal = pyqtSignal(str)
-    finished_signal = pyqtSignal(bool, str)
+    log_signal = Signal(str)
+    finished_signal = Signal(bool, str)
 
     def __init__(self, project_name: str, settings: dict, run_tests: bool = False):
         super().__init__()
@@ -314,7 +314,7 @@ chat_id = {settings.get('telegram_chat_id', '')}
 
 
 class BuildWidget(QWidget):
-    log_signal = pyqtSignal(str)
+    log_signal = Signal(str)
 
     def __init__(self, main_window=None):
         super().__init__()
@@ -649,7 +649,6 @@ class BuildWidget(QWidget):
                 self.log(f"❌ Ошибка очистки: {e}")
 
     def log(self, message: str):
-        from PyQt6.QtCore import QDateTime
         timestamp = QDateTime.currentDateTime().toString("hh:mm:ss")
         self.log_text.append(f"[{timestamp}] {message}")
         self.log_signal.emit(message)

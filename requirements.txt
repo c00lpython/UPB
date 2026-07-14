@@ -1,6 +1,6 @@
 # Core UI Framework
 PySide6>=6.7.0
-
+psutil>=5.9.0
 # Browser Automation (включает playwright внутри)
 cloakbrowser>=0.3.31
 

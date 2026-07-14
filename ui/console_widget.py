@@ -1,3 +1,4 @@
+# ui/console_widget.py
 from PySide6.QtWidgets import QTextEdit, QWidget, QVBoxLayout
 from PySide6.QtCore import QDateTime
 
@@ -10,7 +11,9 @@ class ConsoleWidget(QWidget):
         
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setMaximumHeight(120)
+        # ⚠️ УБИРАЕМ setMaximumHeight(120) — теперь консоль может растягиваться!
+        # self.text_edit.setMaximumHeight(120)  # ❌ УДАЛИТЬ!
+        
         self.text_edit.setStyleSheet("""
             QTextEdit {
                 background-color: #1e1e1e;

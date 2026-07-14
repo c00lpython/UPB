@@ -44,7 +44,7 @@ desktop.ini
 
 # UPB временные файлы
 *.upb.tmp
-
+licensing.md
 # Логи UPB
 upb_*.log
 EOF

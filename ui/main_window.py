@@ -3,10 +3,10 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QFrame, QLabel, QPushButton, QTextEdit,
     QStackedWidget, QListWidget, QListWidgetItem, QLineEdit,
-    QGroupBox, QGridLayout, QMessageBox, QInputDialog
+    QGroupBox, QGridLayout, QMessageBox, QInputDialog,QSizePolicy
 )
 from PySide6.QtCore import Qt, QDateTime, QUrl, QTimer, Signal
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QKeyEvent, QPixmap, QPainter, QColor, QBrush, QPen, QCursor
 from ui.browser_widget import BrowserWidget
 from ui.vm_table import VmTable
 from ui.SE.script_editor import ScriptEditor
@@ -15,9 +15,14 @@ from core.project_manager import ProjectManager
 import os
 import json
 import uuid
+import sys
+import psutil
+from datetime import datetime
 
 
 class MainWindow(QMainWindow):
+    about_to_close = Signal()
+
     def __init__(self, profile=None):
         super().__init__()
         self.setWindowTitle("UPB - Universal Parser Builder")
@@ -31,15 +36,6 @@ class MainWindow(QMainWindow):
         
         os.environ['QTWEBENGINE_REMOTE_DEBUGGING'] = '9222'
         
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #2d2d2d;
-            }
-            QSplitter::handle {
-                background-color: #787878;
-            }
-        """)
-        
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
@@ -49,24 +45,69 @@ class MainWindow(QMainWindow):
         self.create_top_bar()
         main_layout.addWidget(self.top_bar)
         
+        # ========== СНАЧАЛА СОЗДАЁМ ВСЕ ПАНЕЛИ ==========
+        # Создаём content_stack с вкладками
         self.content_stack = QStackedWidget()
         self.content_stack.addWidget(self.create_browser_view())
         self.content_stack.addWidget(self.create_project_panel())
         self.content_stack.addWidget(self.create_vm_panel())
         self.content_stack.addWidget(self.create_build_panel())
         self.content_stack.addWidget(self.create_test_panel())
-        self.content_stack.addWidget(self.create_script_editor_panel())  # Script Editor
-        main_layout.addWidget(self.content_stack, 1)
+        self.content_stack.addWidget(self.create_script_editor_panel())
         
+        # Создаём нижнюю панель
         self.create_bottom_panel()
-        main_layout.addWidget(self.bottom_frame)
-        self.log("UPB Ready | Select mode: OFF")
+        
+        # ========== ТЕПЕРЬ СОЗДАЁМ СПЛИТТЕР ==========
+        self.main_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.main_splitter.setHandleWidth(4)
+        self.main_splitter.setChildrenCollapsible(False)
+        self.main_splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: rgba(255, 255, 255, 0.08);
+                height: 4px;
+            }
+            QSplitter::handle:hover {
+                background-color: rgba(74, 122, 255, 0.4);
+                height: 4px;
+            }
+            QSplitter::handle:pressed {
+                background-color: rgba(74, 122, 255, 0.6);
+            }
+        """)
+        
+        # Добавляем виджеты в сплиттер
+        self.main_splitter.addWidget(self.content_stack)
+        self.main_splitter.addWidget(self.bottom_frame)
+        
+        # Устанавливаем начальные размеры
+        self.main_splitter.setSizes([700, 250])
+        
+        # Отладка
+        print(f"🔍 [SPLITTER DEBUG] Main splitter created")
+        print(f"   Children collapsible: {self.main_splitter.childrenCollapsible()}")
+        print(f"   Handle width: {self.main_splitter.handleWidth()}")
+        print(f"   Initial sizes: {self.main_splitter.sizes()}")
+        
+        # Подключаем сигнал для отслеживания
+        self.main_splitter.splitterMoved.connect(
+            lambda pos, idx: print(f"🔍 [SPLITTER MOVED] Position: {pos}, Index: {idx}, Sizes: {self.main_splitter.sizes()}")
+        )
+        
+        main_layout.addWidget(self.main_splitter, 1)
         
         self._browser_ready = False
         QTimer.singleShot(500, self._set_browser_ready)
         QTimer.singleShot(2000, self.auto_open_latest_project)
         
-        self.log("UPB Ready | Select mode: OFF")
+        # Таймер для статистики
+        self.start_time = datetime.now()
+        self.stats_timer = QTimer()
+        self.stats_timer.timeout.connect(self.update_system_stats)
+        self.stats_timer.start(2000)
+        
+        self.log("🚀 UPB v2.0 Ready")
+        self.log("💡 Select mode: OFF (Press Ctrl+Shift+C to toggle)")
 
     def _set_browser_ready(self):
         self._browser_ready = True
@@ -114,10 +155,8 @@ class MainWindow(QMainWindow):
                 js_code = f"""
                 (function() {{
                     try {{
-                        // Убираем предыдущие подсветки
                         document.querySelectorAll('.upb-overlay, .upb-corner, .upb-label, .upb-margin, .upb-padding').forEach(el => el.remove());
                         
-                        // Ищем элемент по XPath
                         let xpath = "{safe_xpath}";
                         let result = document.evaluate(xpath, document, null, 
                             XPathResult.FIRST_ORDERED_NODE_TYPE, null);
@@ -128,17 +167,14 @@ class MainWindow(QMainWindow):
                             return '❌ Element not found';
                         }}
                         
-                        // Скроллим к элементу
                         element.scrollIntoView({{behavior: 'smooth', block: 'center', inline: 'center'}});
                         
-                        // Получаем размеры и позицию элемента
                         let rect = element.getBoundingClientRect();
                         let top = rect.top + window.scrollY;
                         let left = rect.left + window.scrollX;
                         let width = rect.width;
                         let height = rect.height;
                         
-                        // Создаём оверлей (полупрозрачная заливка)
                         let overlay = document.createElement('div');
                         overlay.className = 'upb-overlay';
                         overlay.style.cssText = `
@@ -154,7 +190,6 @@ class MainWindow(QMainWindow):
                         `;
                         document.body.appendChild(overlay);
                         
-                        // Функция создания уголка
                         function createCorner(x, y, rotate) {{
                             let corner = document.createElement('div');
                             corner.className = 'upb-corner';
@@ -175,13 +210,11 @@ class MainWindow(QMainWindow):
                             return corner;
                         }}
                         
-                        // 4 уголка
-                        createCorner(left - 6, top - 6, 0);      //左上
-                        createCorner(left + width - 6, top - 6, 90);   //右上
-                        createCorner(left + width - 6, top + height - 6, 180); //右下
-                        createCorner(left - 6, top + height - 6, 270);  //左下
+                        createCorner(left - 6, top - 6, 0);
+                        createCorner(left + width - 6, top - 6, 90);
+                        createCorner(left + width - 6, top + height - 6, 180);
+                        createCorner(left - 6, top + height - 6, 270);
                         
-                        // Метка UPB
                         let label = document.createElement('div');
                         label.className = 'upb-label';
                         label.style.cssText = `
@@ -203,7 +236,6 @@ class MainWindow(QMainWindow):
                         label.textContent = '🎯 UPB • ' + element.tagName.toLowerCase();
                         document.body.appendChild(label);
                         
-                        // Пульсация уголков
                         let pulseCount = 0;
                         let pulseInterval = setInterval(() => {{
                             let color = pulseCount % 2 === 0 ? '#ff8800' : '#0078d4';
@@ -219,14 +251,12 @@ class MainWindow(QMainWindow):
                             }}
                         }}, 500);
                         
-                        // Клик для снятия
                         document.addEventListener('click', function cleanup(e) {{
                             document.querySelectorAll('.upb-overlay, .upb-corner, .upb-label').forEach(el => el.remove());
                             document.removeEventListener('click', cleanup);
                             clearInterval(pulseInterval);
                         }}, {{once: true}});
                         
-                        // Обновление при скролле/ресайзе
                         function updatePosition() {{
                             let newRect = element.getBoundingClientRect();
                             overlay.style.top = (newRect.top + window.scrollY) + 'px';
@@ -253,7 +283,6 @@ class MainWindow(QMainWindow):
                         window.addEventListener('scroll', updatePosition, {{passive: true}});
                         window.addEventListener('resize', updatePosition, {{passive: true}});
                         
-                        // Сохраняем ссылки для очистки
                         window._upb_cleanup = () => {{
                             document.querySelectorAll('.upb-overlay, .upb-corner, .upb-label').forEach(el => el.remove());
                             window.removeEventListener('scroll', updatePosition);
@@ -290,24 +319,54 @@ class MainWindow(QMainWindow):
 
     def create_top_bar(self):
         self.top_bar = QFrame()
-        self.top_bar.setMaximumHeight(40)
-        self.top_bar.setStyleSheet("""
-            QFrame {
-                background-color: #2d2d2d;
-                border-bottom: 1px solid #787878;
-            }
-        """)
+        self.top_bar.setMaximumHeight(44)
+        self.top_bar.setProperty("topbar", True)
         
         layout = QHBoxLayout(self.top_bar)
         layout.setContentsMargins(10, 0, 10, 0)
         layout.setSpacing(20)
         
-        logo = QLabel("UPB")
-        logo.setStyleSheet("color: #0e639c; font-weight: bold; font-size: 14px;")
-        layout.addWidget(logo)
+        logo_container = QWidget()
+        logo_container.setFixedSize(32, 32)
+        logo_container.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #9b59b6,
+                    stop:0.5 #8e44ad,
+                    stop:1 #7c4dff);
+                border-radius: 6px;
+            }
+        """)
+        
+        logo_label = QLabel("UPB", logo_container)
+        logo_label.setGeometry(0, 0, 32, 32)
+        logo_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-weight: 800;
+                font-size: 9px;
+                letter-spacing: 0.5px;
+                qproperty-alignment: AlignCenter;
+                font-family: 'Segoe UI', sans-serif;
+            }
+        """)
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(logo_container)
+        
+        version_label = QLabel("v2.0")
+        version_label.setStyleSheet("""
+            color: #ffffff;
+            font-weight: 300;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            opacity: 0.7;
+            padding-top: 4px;
+        """)
+        version_label.setProperty("version", True)
+        layout.addWidget(version_label)
         
         separator = QLabel("│")
-        separator.setStyleSheet("color: #787878;")
+        separator.setProperty("separator", True)
         layout.addWidget(separator)
         
         self.tab_browser = QPushButton("Browser")
@@ -317,22 +376,9 @@ class MainWindow(QMainWindow):
         self.tab_test = QPushButton("Test")
         self.tab_script = QPushButton("Script Editor")
         
-        tab_style = """
-            QPushButton {
-                background-color: transparent;
-                color: #cccccc;
-                padding: 8px 12px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #3c3c3c;
-                color: #ffffff;
-            }
-        """
-        
         for tab in [self.tab_browser, self.tab_project, self.tab_vm, 
                     self.tab_build, self.tab_test, self.tab_script]:
-            tab.setStyleSheet(tab_style)
+            tab.setProperty("tab", True)
             layout.addWidget(tab)
         
         layout.addStretch()
@@ -341,37 +387,10 @@ class MainWindow(QMainWindow):
         self.btn_max = QPushButton("□")
         self.btn_close = QPushButton("✕")
         
-        btn_style = """
-            QPushButton {
-                background-color: transparent;
-                color: #cccccc;
-                padding: 6px 12px;
-                border: none;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #4c4c4c;
-                color: #ffffff;
-            }
-        """
-        
-        close_style = """
-            QPushButton {
-                background-color: transparent;
-                color: #cccccc;
-                padding: 6px 12px;
-                border: none;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #e81123;
-                color: #ffffff;
-            }
-        """
-        
-        self.btn_min.setStyleSheet(btn_style)
-        self.btn_max.setStyleSheet(btn_style)
-        self.btn_close.setStyleSheet(close_style)
+        self.btn_min.setProperty("windowbtn", True)
+        self.btn_max.setProperty("windowbtn", True)
+        self.btn_close.setProperty("windowbtn", True)
+        self.btn_close.setProperty("closebtn", True)
         
         self.btn_min.clicked.connect(self.showMinimized)
         self.btn_max.clicked.connect(self.toggle_maximized)
@@ -388,18 +407,10 @@ class MainWindow(QMainWindow):
         self.tab_test.clicked.connect(lambda: self.switch_tab(4))
         self.tab_script.clicked.connect(lambda: self.switch_tab(5))
         
-        self.tab_browser.setStyleSheet("""
-            QPushButton {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                padding: 8px 12px;
-                border: none;
-            }
-        """)
+        self.tab_browser.setProperty("active", True)
         self.current_tab_index = 0
     
     def create_browser_view(self):
-        """Создаёт браузер с профилем из открытого проекта или временный"""
         panel = QWidget()
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -407,15 +418,12 @@ class MainWindow(QMainWindow):
         
         from PySide6.QtWebEngineCore import QWebEngineProfile
         
-        # Проверяем, есть ли открытый проект
         if self.project_manager and self.project_manager.current_project:
             project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
             profile_path = os.path.join(project_path, "profile")
             
-            # Создаём папку профиля если её нет
             os.makedirs(profile_path, exist_ok=True)
             
-            # Используем профиль проекта
             profile = QWebEngineProfile(f"UPB_{self.project_manager.current_project}")
             profile.setPersistentStoragePath(profile_path)
             profile.setPersistentCookiesPolicy(
@@ -431,7 +439,6 @@ class MainWindow(QMainWindow):
             print(f"{'='*70}\n")
             
         else:
-            # Нет открытого проекта — создаём временный профиль
             temp_id = str(uuid.uuid4())[:8]
             profile = QWebEngineProfile(f"Temporary_{temp_id}")
             profile.setPersistentStoragePath(f"temp_profile_{temp_id}")
@@ -447,29 +454,38 @@ class MainWindow(QMainWindow):
             print(f"   🆔 ID: {temp_id}")
             print(f"{'='*70}\n")
         
-        # Создаём виджет браузера
         self.browser_widget = BrowserWidget(profile)
         
-        # Подключаем сигналы
         self.browser_widget.url_changed.connect(self.on_browser_url_changed)
         self.browser_widget.devtools_changed.connect(self.on_devtools_changed)
         self.browser_widget.selector_captured.connect(self.on_selector_captured)
         
-        # Контейнер для DevTools
         self.devtools_container = QWidget()
-        self.devtools_container.setStyleSheet("background-color: #1e1e1e; border-left: 1px solid #787878;")
+        self.devtools_container.setProperty("devtools_container", True)
         self.devtools_container_layout = QVBoxLayout(self.devtools_container)
         self.devtools_container_layout.setContentsMargins(0, 0, 0, 0)
         
         self.current_devtools_view = None
         
-        # Разделитель (браузер + DevTools)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.browser_widget)
         splitter.addWidget(self.devtools_container)
         splitter.setSizes([850, 150])
-        splitter.setHandleWidth(2)
-        splitter.setStyleSheet("QSplitter::handle { background-color: #787878; }")
+        splitter.setHandleWidth(4)
+        splitter.setProperty("browser_splitter", True)
+        splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: rgba(255, 255, 255, 0.05);
+                width: 4px;
+            }
+            QSplitter::handle:hover {
+                background-color: rgba(74, 122, 255, 0.3);
+                width: 4px;
+            }
+            QSplitter::handle:pressed {
+                background-color: rgba(74, 122, 255, 0.5);
+            }
+        """)
         
         layout.addWidget(splitter)
         return panel
@@ -486,7 +502,6 @@ class MainWindow(QMainWindow):
         self.devtools_container_layout.addWidget(self.current_devtools_view)
 
     def create_script_editor_panel(self):
-        """Script Editor панель с n8n браузером и кастомными блоками"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -510,48 +525,17 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(10)
         
         projects_label = QLabel("📁 PROJECTS")
-        projects_label.setStyleSheet("color: #0e639c; font-weight: bold; font-size: 12px; padding: 5px;")
+        projects_label.setProperty("header", True)
         left_layout.addWidget(projects_label)
         
         self.project_list = QListWidget()
-        self.project_list.setStyleSheet("""
-            QListWidget {
-                background-color: #252526;
-                color: #cccccc;
-                border: 1px solid #3c3c3c;
-                border-radius: 4px;
-                outline: none;
-            }
-            QListWidget::item {
-                padding: 8px;
-                border-bottom: 1px solid #3c3c3c;
-            }
-            QListWidget::item:hover {
-                background-color: #3c3c3c;
-            }
-            QListWidget::item:selected {
-                background-color: #0e639c;
-                color: #ffffff;
-            }
-        """)
+        self.project_list.setProperty("project_list", True)
         
         self.refresh_project_list()
         left_layout.addWidget(self.project_list)
         
         self.btn_new_project = QPushButton("➕ New Project")
-        self.btn_new_project.setStyleSheet("""
-            QPushButton {
-                background-color: #0e639c;
-                color: white;
-                padding: 8px;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1177bb;
-            }
-        """)
+        self.btn_new_project.setProperty("primary", True)
         left_layout.addWidget(self.btn_new_project)
         
         right_panel = QWidget()
@@ -560,20 +544,7 @@ class MainWindow(QMainWindow):
         right_layout.setSpacing(10)
         
         info_group = QGroupBox("📄 Project Details")
-        info_group.setStyleSheet("""
-            QGroupBox {
-                color: #cccccc;
-                border: 1px solid #3c3c3c;
-                border-radius: 5px;
-                margin-top: 10px;
-                font-weight: bold;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
+        info_group.setProperty("project_details", True)
         
         info_layout = QGridLayout(info_group)
         info_layout.setSpacing(10)
@@ -581,64 +552,32 @@ class MainWindow(QMainWindow):
         info_layout.addWidget(QLabel("Name:"), 0, 0)
         self.project_name = QLineEdit()
         self.project_name.setPlaceholderText("Project name")
-        self.project_name.setStyleSheet("""
-            QLineEdit {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                border: 1px solid #3c3c3c;
-                padding: 5px;
-                border-radius: 3px;
-            }
-        """)
         self.project_name.setReadOnly(True)
         info_layout.addWidget(self.project_name, 0, 1)
         
         info_layout.addWidget(QLabel("Created:"), 1, 0)
         self.project_created = QLabel("—")
-        self.project_created.setStyleSheet("color: #cccccc; padding: 5px;")
         info_layout.addWidget(self.project_created, 1, 1)
         
         info_layout.addWidget(QLabel("Modified:"), 2, 0)
         self.project_modified = QLabel("—")
-        self.project_modified.setStyleSheet("color: #cccccc; padding: 5px;")
         info_layout.addWidget(self.project_modified, 2, 1)
         
         info_layout.addWidget(QLabel("Variables:"), 3, 0)
         self.project_vars_count = QLabel("0")
-        self.project_vars_count.setStyleSheet("color: #0e639c; font-weight: bold; padding: 5px;")
+        self.project_vars_count.setProperty("accent", True)
         info_layout.addWidget(self.project_vars_count, 3, 1)
         
         right_layout.addWidget(info_group)
         
         vars_group = QGroupBox("📊 Variables Preview")
-        vars_group.setStyleSheet("""
-            QGroupBox {
-                color: #cccccc;
-                border: 1px solid #3c3c3c;
-                border-radius: 5px;
-                margin-top: 10px;
-                font-weight: bold;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
+        vars_group.setProperty("variables_preview", True)
         
         vars_layout = QVBoxLayout(vars_group)
         self.vars_preview = QTextEdit()
         self.vars_preview.setReadOnly(True)
         self.vars_preview.setMaximumHeight(150)
-        self.vars_preview.setStyleSheet("""
-            QTextEdit {
-                background-color: #252526;
-                color: #cccccc;
-                border: none;
-                font-family: Consolas;
-                font-size: 11px;
-            }
-        """)
+        self.vars_preview.setProperty("preview", True)
         vars_layout.addWidget(self.vars_preview)
         
         right_layout.addWidget(vars_group)
@@ -650,23 +589,9 @@ class MainWindow(QMainWindow):
         self.btn_save = QPushButton("💾 Save Project")
         self.btn_export = QPushButton("🚀 Export Parser")
         self.btn_delete = QPushButton("🗑 Delete")
-        
-        action_style = """
-            QPushButton {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                padding: 8px 15px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #4c4c4c;
-                color: #ffffff;
-            }
-        """
+        self.btn_delete.setProperty("danger", True)
         
         for btn in [self.btn_open, self.btn_save, self.btn_export, self.btn_delete]:
-            btn.setStyleSheet(action_style)
             actions_layout.addWidget(btn)
         
         actions_layout.addStretch()
@@ -705,7 +630,6 @@ class MainWindow(QMainWindow):
                 self.project_modified.setText(project_data['modified'][:16] if project_data['modified'] else "—")
                 self.project_vars_count.setText(str(project_data['variables_count']))
                 
-                # Обновляем Script Editor с текущим проектом
                 if hasattr(self, 'script_editor'):
                     self.script_editor.update_project(project_data['name'])
                 
@@ -756,7 +680,6 @@ class MainWindow(QMainWindow):
                 self.project_manager.current_project = name
                 self.project_manager.current_profile = profile
                 
-                # Обновляем Script Editor
                 if hasattr(self, 'script_editor'):
                     self.script_editor.update_project(name)
                 
@@ -891,7 +814,6 @@ class MainWindow(QMainWindow):
             self.project_manager.current_project = project_name
             self.project_manager.current_profile = profile
             
-            # Обновляем Script Editor
             if hasattr(self, 'script_editor'):
                 self.script_editor.update_project(project_name)
             
@@ -1088,73 +1010,115 @@ chat_id =
                       "• Preview results before build\n"
                       "• Check variables extraction\n"
                       "• Validate XPath selectors")
-        label.setStyleSheet("color: #cccccc; font-size: 14px; padding: 20px;")
+        label.setProperty("test_label", True)
         label.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(label)
         return widget
-    
+        
     def create_bottom_panel(self):
-        bottom_layout = QHBoxLayout()
+        """Создаёт нижнюю панель с консолью и кнопками"""
+        bottom_widget = QWidget()
+        bottom_widget.setProperty("bottom_frame", True)
+        
+        # ВАЖНО: Устанавливаем политику размера
+        bottom_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,  # Горизонтально - расширяется
+            QSizePolicy.Policy.Expanding   # Вертикально - расширяется (ключевое!)
+        )
+        # Убираем все ограничения размеров
+        bottom_widget.setMinimumSize(0, 50)  # Минимальная высота 50px
+        bottom_widget.setMaximumSize(16777215, 16777215)  # Без максимальных ограничений
+        
+        bottom_layout = QHBoxLayout(bottom_widget)
         bottom_layout.setContentsMargins(5, 2, 5, 2)
         bottom_layout.setSpacing(10)
         
+        # ========== КОНСОЛЬ ==========
         console_container = QWidget()
-        console_container.setMaximumHeight(80)
+        console_container.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding
+        )
+        
         console_layout = QVBoxLayout(console_container)
         console_layout.setContentsMargins(0, 0, 0, 0)
         console_layout.setSpacing(2)
         
-        self.console_label = QLabel("v1 | console: Ready")
-        self.console_label.setStyleSheet("color: #cccccc; font-family: Consolas; font-size: 11px; padding: 2px;")
+        # Статусная строка (фиксированная высота)
+        status_widget = QWidget()
+        status_widget.setFixedHeight(20)
+        status_layout = QHBoxLayout(status_widget)
+        status_layout.setSpacing(15)
+        status_layout.setContentsMargins(2, 0, 2, 0)
         
+        self.console_label = QLabel("v2.0 | console: Ready")
+        self.console_label.setProperty("console_label", True)
+        status_layout.addWidget(self.console_label)
+        
+        sep = QLabel("•")
+        sep.setStyleSheet("color: rgba(255,255,255,0.2); font-size: 12px;")
+        status_layout.addWidget(sep)
+        
+        self.cpu_label = QLabel("💻 CPU: --%")
+        self.cpu_label.setStyleSheet("color: rgba(255,255,255,0.5); font-size: 10px; font-family: 'Consolas', monospace;")
+        status_layout.addWidget(self.cpu_label)
+        
+        self.ram_label = QLabel("🧠 RAM: --/--MB")
+        self.ram_label.setStyleSheet("color: rgba(255,255,255,0.5); font-size: 10px; font-family: 'Consolas', monospace;")
+        status_layout.addWidget(self.ram_label)
+        
+        self.uptime_label = QLabel("⏱️ Uptime: 00:00:00")
+        self.uptime_label.setStyleSheet("color: rgba(255,255,255,0.5); font-size: 10px; font-family: 'Consolas', monospace;")
+        status_layout.addWidget(self.uptime_label)
+        
+        self.projects_label = QLabel("📁 Projects: 0")
+        self.projects_label.setStyleSheet("color: rgba(255,255,255,0.5); font-size: 10px; font-family: 'Consolas', monospace;")
+        status_layout.addWidget(self.projects_label)
+        
+        status_layout.addStretch()
+        console_layout.addWidget(status_widget)
+        
+        # Консольный текст (растягивается)
         self.console_text = QTextEdit()
         self.console_text.setReadOnly(True)
-        self.console_text.setMaximumHeight(60)
-        self.console_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #2d2d2d;
-                color: #cccccc;
-                font-family: Consolas;
-                font-size: 11px;
-                border: 1px solid #787878;
-            }
-        """)
+        self.console_text.setProperty("console", True)
+        self.console_text.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding
+        )
+        self.console_text.setMinimumHeight(30)
+        self.console_text.setMaximumHeight(16777215)
         
-        console_layout.addWidget(self.console_label)
-        console_layout.addWidget(self.console_text)
+        console_layout.addWidget(self.console_text, 1)  # Stretch factor = 1
         
+        # ========== КНОПКИ ==========
         tools_widget = QWidget()
-        tools_widget.setMaximumHeight(80)
-        tools_widget.setMaximumWidth(200)
+        tools_widget.setFixedWidth(300)
+        tools_widget.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Expanding
+        )
+        
         tools_layout = QHBoxLayout(tools_widget)
-        tools_layout.setSpacing(5)
+        tools_layout.setSpacing(10)
+        tools_layout.setContentsMargins(5, 0, 5, 0)
+        tools_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
         self.btn_select = QPushButton("Select")
         self.btn_select.setCheckable(True)
+        self.btn_select.setProperty("selectable", True)
+        self.btn_select.setMinimumWidth(85)
+        self.btn_select.setFixedHeight(35)
+        
         self.btn_build = QPushButton("Build")
+        self.btn_build.setProperty("success", True)
+        self.btn_build.setMinimumWidth(85)
+        self.btn_build.setFixedHeight(35)
+        
         self.btn_run = QPushButton("Run")
-        
-        btn_style = """
-            QPushButton {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                padding: 6px 12px;
-                border: 1px solid #787878;
-            }
-            QPushButton:hover {
-                background-color: #4c4c4c;
-                color: #ffffff;
-            }
-            QPushButton:checked {
-                background-color: #0e639c;
-                color: #ffffff;
-                border: 1px solid #0e639c;
-            }
-        """
-        
-        self.btn_select.setStyleSheet(btn_style)
-        self.btn_build.setStyleSheet(btn_style)
-        self.btn_run.setStyleSheet(btn_style)
+        self.btn_run.setProperty("primary", True)
+        self.btn_run.setMinimumWidth(85)
+        self.btn_run.setFixedHeight(35)
         
         tools_layout.addWidget(self.btn_select)
         tools_layout.addWidget(self.btn_build)
@@ -1164,20 +1128,40 @@ chat_id =
         bottom_layout.addWidget(console_container, 1)
         bottom_layout.addWidget(tools_widget)
         
-        self.bottom_frame = QFrame()
-        self.bottom_frame.setLayout(bottom_layout)
-        self.bottom_frame.setMaximumHeight(80)
-        self.bottom_frame.setStyleSheet("""
-            QFrame {
-                background-color: #2d2d2d;
-                border-top: 1px solid #787878;
-            }
-        """)
+        self.bottom_frame = bottom_widget
         
         self.btn_select.clicked.connect(self.toggle_select_mode)
         self.btn_build.clicked.connect(self.on_build_clicked)
         self.btn_run.clicked.connect(self.on_run_clicked)
-    
+
+    def update_system_stats(self):
+        """Обновляет системную статистику"""
+        try:
+            cpu_percent = psutil.cpu_percent(interval=0.5)
+            self.cpu_label.setText(f"💻 CPU: {cpu_percent:.0f}%")
+            
+            mem = psutil.virtual_memory()
+            used_mb = mem.used / (1024 * 1024)
+            total_mb = mem.total / (1024 * 1024)
+            self.ram_label.setText(f"🧠 RAM: {used_mb:.0f}/{total_mb:.0f}MB")
+            
+            elapsed = datetime.now() - self.start_time
+            hours = elapsed.seconds // 3600
+            minutes = (elapsed.seconds % 3600) // 60
+            seconds = elapsed.seconds % 60
+            self.uptime_label.setText(f"⏱️ Uptime: {hours:02d}:{minutes:02d}:{seconds:02d}")
+            
+            if hasattr(self, 'project_manager'):
+                projects = self.project_manager.get_all_projects()
+                self.projects_label.setText(f"📁 Projects: {len(projects)}")
+                
+        except ImportError:
+            self.cpu_label.setText("💻 CPU: N/A")
+            self.ram_label.setText("🧠 RAM: N/A")
+            self.uptime_label.setText("⏱️ Uptime: N/A")
+        except Exception:
+            pass
+
     def on_build_clicked(self):
         self.log("🔨 Build started...")
         
@@ -1218,34 +1202,16 @@ chat_id =
         self.content_stack.setCurrentIndex(index)
         self.current_tab_index = index
         
-        tab_style_normal = """
-            QPushButton {
-                background-color: transparent;
-                color: #cccccc;
-                padding: 8px 12px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #3c3c3c;
-                color: #ffffff;
-            }
-        """
+        tabs = [self.tab_browser, self.tab_project, self.tab_vm, 
+                self.tab_build, self.tab_test, self.tab_script]
         
-        tab_style_active = """
-            QPushButton {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                padding: 8px 12px;
-                border: none;
-            }
-        """
-        
-        tabs = [self.tab_browser, self.tab_project, self.tab_vm, self.tab_build, self.tab_test, self.tab_script]
         for i, tab in enumerate(tabs):
             if i == index:
-                tab.setStyleSheet(tab_style_active)
+                tab.setProperty("active", True)
             else:
-                tab.setStyleSheet(tab_style_normal)
+                tab.setProperty("active", False)
+            tab.style().unpolish(tab)
+            tab.style().polish(tab)
         
         tab_names = ["Browser", "Project", "VM", "Build", "Test", "Script Editor"]
         self.log(f"Switched to {tab_names[index]} tab")
@@ -1392,3 +1358,46 @@ chat_id =
             self.toggle_select_mode()
         else:
             super().keyPressEvent(event)
+
+    def closeEvent(self, event):
+        """Корректное завершение приложения"""
+        print("\n🛑 Closing application...")
+        
+        if hasattr(self, 'stats_timer'):
+            self.stats_timer.stop()
+        
+        if hasattr(self, 'build_widget') and hasattr(self.build_widget, 'timer'):
+            self.build_widget.timer.stop()
+        
+        if hasattr(self, 'browser_widget') and hasattr(self.browser_widget, 'cleanup'):
+            try:
+                self.browser_widget.cleanup()
+                print("✅ Browser cleaned up")
+            except Exception as e:
+                print(f"⚠️ Browser cleanup error: {e}")
+        
+        if hasattr(self, 'script_editor') and hasattr(self.script_editor, 'canvas'):
+            try:
+                self.script_editor.canvas.stop_updates()
+                print("✅ Script Editor stopped")
+            except Exception as e:
+                print(f"⚠️ Script Editor stop error: {e}")
+        
+        if hasattr(self, 'vm_table') and hasattr(self.vm_table, 'table'):
+            try:
+                self.vm_table.clear_all()
+                print("✅ VM Table cleared")
+            except Exception as e:
+                print(f"⚠️ VM Table clear error: {e}")
+        
+        if self.project_manager and self.project_manager.current_project:
+            try:
+                self.on_save_project()
+                print(f"✅ Project saved: {self.project_manager.current_project}")
+            except Exception as e:
+                print(f"⚠️ Project save error: {e}")
+        
+        event.accept()
+        print("👋 Application closed successfully")
+        
+        QTimer.singleShot(100, lambda: sys.exit(0))

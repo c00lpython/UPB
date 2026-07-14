@@ -1,3 +1,4 @@
+# ui/vm_table.py
 from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QComboBox, QWidget, 
     QVBoxLayout, QHBoxLayout, QPushButton, QHeaderView,
@@ -13,69 +14,114 @@ class VmTable(QWidget):
     
     def __init__(self):
         super().__init__()
+        
+        # ========== КОСМИЧЕСКИЙ ГРАДИЕНТНЫЙ ФОН ==========
+        self.setStyleSheet("""
+            QWidget#VmTable {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #0a0a1a,
+                    stop:0.3 #14142e,
+                    stop:0.6 #1a0a2e,
+                    stop:1 #0a0a2a);
+                border-radius: 24px;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+            }
+        """)
+        self.setObjectName("VmTable")
+        
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         
         # ========== ПАНЕЛЬ ПОИСКА ==========
         search_layout = QHBoxLayout()
-        search_layout.setSpacing(5)
+        search_layout.setSpacing(8)
         
-        # Поле поиска
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍 Search variables...")
         self.search_input.textChanged.connect(self.filter_table)
         self.search_input.setStyleSheet("""
             QLineEdit {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                border: 1px solid #3c3c3c;
-                padding: 5px;
-                border-radius: 3px;
+                background-color: rgba(255, 255, 255, 0.04);
+                color: #e8e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                padding: 8px 14px;
+                font-size: 12px;
+                font-family: 'Segoe UI', sans-serif;
             }
             QLineEdit:focus {
-                border: 1px solid #0e639c;
+                border: 1px solid rgba(124, 77, 255, 0.4);
+                background-color: rgba(255, 255, 255, 0.06);
+            }
+            QLineEdit::placeholder {
+                color: rgba(255, 255, 255, 0.3);
             }
         """)
         
-        # Выпадающий список для выбора колонки поиска
         self.search_column = QComboBox()
         self.search_column.addItems(["All", "Name", "XPath/CSS", "Type", "URL", "Sample Text"])
         self.search_column.setCurrentText("All")
         self.search_column.setStyleSheet("""
             QComboBox {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                border: 1px solid #3c3c3c;
-                padding: 5px;
-                border-radius: 3px;
+                background-color: rgba(255, 255, 255, 0.04);
+                color: #e8e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                padding: 8px 14px;
+                font-size: 12px;
                 min-width: 100px;
+                font-family: 'Segoe UI', sans-serif;
+            }
+            QComboBox:hover {
+                border-color: rgba(255, 255, 255, 0.15);
             }
             QComboBox::drop-down {
                 border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSI4IiB2aWV3Qm94PSIwIDAgMTIgOCI+PHBhdGggZD0iTTEgMWw1IDUgNS01IiBzdHJva2U9InJnYmEoMjU1LDI1NSwyNTUsMC41KSIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIi8+PC9zdmc+);
+                width: 12px;
+                height: 8px;
             }
             QComboBox QAbstractItemView {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                selection-background-color: #0e639c;
+                background-color: #1a1a2e;
+                color: #e8e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                selection-background-color: rgba(124, 77, 255, 0.25);
+                padding: 4px;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 8px 12px;
+                border-radius: 8px;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(124, 77, 255, 0.3),
+                    stop:1 rgba(74, 122, 255, 0.3));
+                color: white;
             }
         """)
         
-        # Кнопка очистки поиска
         self.btn_clear_search = QPushButton("✕")
-        self.btn_clear_search.setMaximumWidth(30)
+        self.btn_clear_search.setMaximumWidth(32)
         self.btn_clear_search.clicked.connect(self.clear_search)
         self.btn_clear_search.setStyleSheet("""
             QPushButton {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                border: 1px solid #3c3c3c;
-                border-radius: 3px;
-                padding: 5px;
+                background-color: rgba(255, 255, 255, 0.04);
+                color: rgba(255, 255, 255, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 12px;
+                padding: 6px;
+                font-size: 12px;
+                font-weight: 300;
             }
             QPushButton:hover {
-                background-color: #4c4c4c;
-                color: #cccccc;
+                background-color: rgba(255, 255, 255, 0.08);
+                color: rgba(255, 255, 255, 0.8);
+                border-color: rgba(255, 255, 255, 0.15);
             }
         """)
         
@@ -85,21 +131,30 @@ class VmTable(QWidget):
         
         # ========== КНОПКИ УПРАВЛЕНИЯ ==========
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
+        
         self.btn_add = QPushButton("➕ Add Variable")
         self.btn_remove = QPushButton("❌ Remove Selected")
         self.btn_clear = QPushButton("🗑 Clear All")
         
         btn_style = """
             QPushButton {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                padding: 5px 10px;
-                border: none;
-                border-radius: 3px;
+                background-color: rgba(255, 255, 255, 0.04);
+                color: #e8e8f0;
+                padding: 8px 16px;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 12px;
+                font-size: 12px;
+                font-family: 'Segoe UI', sans-serif;
+                font-weight: 500;
             }
             QPushButton:hover {
-                background-color: #4c4c4c;
-                color: #cccccc;
+                background-color: rgba(255, 255, 255, 0.08);
+                color: #ffffff;
+                border-color: rgba(255, 255, 255, 0.15);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.02);
             }
         """
         
@@ -112,56 +167,131 @@ class VmTable(QWidget):
         btn_layout.addWidget(self.btn_clear)
         btn_layout.addStretch()
         
-        # ========== ТАБЛИЦА ==========
+        # ========== ТАБЛИЦА - КАРТОЧКА ==========
         self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(["Name", "XPath/CSS", "Type", "URL", "Sample Text"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         
-        # Включаем контекстное меню
-        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self._show_context_menu)
-        
-        # Отключаем вертикальную колонку с номерами строк
-        self.table.verticalHeader().setVisible(False)
-        
-        # Отключаем чередование цветов (зебру)
-        self.table.setAlternatingRowColors(False)
-        
-        # Единый стиль для всей таблицы
         self.table.setStyleSheet("""
+            /* ----- КАРТОЧКА ТАБЛИЦЫ ----- */
             QTableWidget {
-                background-color: #2d2d2d;
-                gridline-color: #3c3c3c;
-                border: none;
+                background-color: rgba(10, 10, 26, 0.6);
+                color: rgba(255, 255, 255, 0.5);
+                gridline-color: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 20px;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 12px;
+                outline: none;
+                selection-background-color: transparent;
+                padding: 4px;
             }
+            
+            /* ----- ЯЧЕЙКИ ----- */
             QTableWidget::item {
-                color: #cccccc;
-                background-color: #2d2d2d;
-                padding: 5px;
+                padding: 8px 14px;
                 border: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+                background-color: transparent;
+                color: rgba(255, 255, 255, 0.5);
             }
+            
+            /* ----- ВЫДЕЛЕННАЯ СТРОКА (как focus-within) ----- */
             QTableWidget::item:selected {
-                background-color: #0e639c;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(124, 77, 255, 0.15),
+                    stop:1 rgba(74, 122, 255, 0.15));
+                color: #ffffff;
+                border-left: 3px solid qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #9b59b6,
+                    stop:1 #7c4dff);
             }
+            
+            /* ----- ПРИ НАВЕДЕНИИ НА ЯЧЕЙКУ ----- */
+            QTableWidget::item:hover {
+                background-color: rgba(255, 255, 255, 0.04);
+                color: rgba(255, 255, 255, 0.8);
+            }
+            
+            /* ----- ЗАГОЛОВКИ (thead) ----- */
             QHeaderView::section {
-                background-color: #252526;
-                color: #cccccc;
-                padding: 5px;
+                background-color: rgba(255, 255, 255, 0.03);
+                color: rgba(255, 255, 255, 0.5);
+                padding: 10px 14px;
                 border: none;
-                border-right: 1px solid #3c3c3c;
-                border-bottom: 1px solid #3c3c3c;
+                border-bottom: 2px solid qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(155, 89, 182, 0.2),
+                    stop:1 rgba(124, 77, 255, 0.2));
+                font-weight: 600;
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                text-align: left;
+                font-family: 'Segoe UI', sans-serif;
             }
-            QTableCornerButton::section {
-                background-color: #252526;
-                border: none;
+            
+            QHeaderView::section:hover {
+                background-color: rgba(255, 255, 255, 0.06);
+                color: rgba(255, 255, 255, 0.8);
+            }
+            
+            /* ----- СКРОЛЛБАРЫ (космические) ----- */
+            QScrollBar:vertical {
+                background-color: rgba(255, 255, 255, 0.02);
+                width: 6px;
+                border-radius: 3px;
+                margin: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.3),
+                    stop:1 rgba(74, 122, 255, 0.3));
+                border-radius: 3px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.5),
+                    stop:1 rgba(74, 122, 255, 0.5));
+            }
+            QScrollBar:horizontal {
+                background-color: rgba(255, 255, 255, 0.02);
+                height: 6px;
+                border-radius: 3px;
+                margin: 4px;
+            }
+            QScrollBar::handle:horizontal {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(155, 89, 182, 0.3),
+                    stop:1 rgba(74, 122, 255, 0.3));
+                border-radius: 3px;
+                min-width: 20px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(155, 89, 182, 0.5),
+                    stop:1 rgba(74, 122, 255, 0.5));
+            }
+            QScrollBar::add-line, QScrollBar::sub-line {
+                height: 0px;
+                width: 0px;
             }
         """)
         
-        # Убираем сетку
+        # Настройки таблицы
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_context_menu)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(False)
         self.table.setShowGrid(False)
         
+        # Растягиваем колонки
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header.setStretchLastSection(True)
+        
+        # Сборка
         layout.addLayout(search_layout)
         layout.addLayout(btn_layout)
         layout.addWidget(self.table)
@@ -174,15 +304,12 @@ class VmTable(QWidget):
     
     def _show_context_menu(self, pos):
         """Показывает контекстное меню для выбранной строки"""
-        # Получаем строку по позиции клика
         row = self.table.rowAt(pos.y())
         if row < 0:
             return
         
-        # Выделяем строку
         self.table.selectRow(row)
         
-        # Получаем данные из строки
         name_item = self.table.item(row, 0)
         xpath_item = self.table.item(row, 1)
         type_combo = self.table.cellWidget(row, 2)
@@ -198,47 +325,43 @@ class VmTable(QWidget):
         if not var_name:
             return
         
-        # Создаём контекстное меню
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
-                background-color: #2d2d2d;
-                color: #cccccc;
-                border: 1px solid #3d5afe;
-                border-radius: 6px;
-                padding: 4px;
+                background-color: rgba(20, 20, 40, 0.95);
+                color: #e8e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 16px;
+                padding: 6px;
                 font-size: 12px;
+                font-family: 'Segoe UI', sans-serif;
             }
             QMenu::item {
-                padding: 8px 30px 8px 12px;
-                border-radius: 4px;
+                padding: 8px 24px;
+                border-radius: 8px;
                 margin: 2px 4px;
             }
             QMenu::item:selected {
-                background-color: #094771;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(155, 89, 182, 0.2),
+                    stop:1 rgba(124, 77, 255, 0.2));
                 color: #ffffff;
-            }
-            QMenu::item:disabled {
-                color: #666666;
             }
             QMenu::separator {
                 height: 1px;
-                background: #444;
+                background: rgba(255, 255, 255, 0.04);
                 margin: 4px 8px;
             }
         """)
         
-        # Заголовок с именем переменной
         header = menu.addAction(f"📦 {var_name}")
         header.setEnabled(False)
         
-        # Тип переменной
         type_action = menu.addAction(f"📌 Type: {var_type}")
         type_action.setEnabled(False)
         
         menu.addSeparator()
         
-        # View in Browser (только если есть URL)
         if url:
             view_action = menu.addAction("🌐 View in Browser")
             view_action.setToolTip(f"Open {url} and highlight element by XPath")
@@ -251,7 +374,6 @@ class VmTable(QWidget):
         
         menu.addSeparator()
         
-        # Копирование данных
         copy_menu = menu.addMenu("📋 Copy")
         copy_menu.setStyleSheet(menu.styleSheet())
         
@@ -279,34 +401,27 @@ class VmTable(QWidget):
         
         menu.addSeparator()
         
-        # Удаление
         delete_action = menu.addAction("🗑 Delete Variable")
         delete_action.triggered.connect(lambda: self._delete_row(row))
         
-        # Показываем меню
         menu.exec(self.table.viewport().mapToGlobal(pos))
     
     def _delete_row(self, row: int):
-        """Удаляет строку по индексу"""
         if 0 <= row < self.table.rowCount():
             self.table.removeRow(row)
     
     def filter_table(self):
-        """Фильтрует таблицу по поисковому запросу"""
         search_text = self.search_input.text().lower()
         search_column = self.search_column.currentText()
         
         if not search_text:
-            # Показываем все строки
             for i in range(self.table.rowCount()):
                 self.table.setRowHidden(i, False)
             return
         
-        # Проходим по всем строкам
         for row in range(self.table.rowCount()):
             show_row = False
             
-            # Проверяем каждую колонку
             if search_column == "All" or search_column == "Name":
                 name_item = self.table.item(row, 0)
                 if name_item and search_text in name_item.text().lower():
@@ -335,11 +450,9 @@ class VmTable(QWidget):
             self.table.setRowHidden(row, not show_row)
     
     def clear_search(self):
-        """Очищает поле поиска"""
         self.search_input.clear()
     
     def add_variable(self, name: str = "", xpath: str = "", var_type: str = "Static", url: str = "", sample: str = ""):
-        """Добавляет переменную в таблицу"""
         row = self.table.rowCount()
         self.table.insertRow(row)
         
@@ -359,18 +472,28 @@ class VmTable(QWidget):
         combo.setCurrentText(var_type)
         combo.setStyleSheet("""
             QComboBox {
-                background-color: #3c3c3c;
-                color: #cccccc;
+                background-color: transparent;
+                color: #e8e8f0;
                 border: none;
-                padding: 2px;
+                padding: 4px 8px;
+                font-size: 12px;
+                font-family: 'Segoe UI', sans-serif;
             }
             QComboBox::drop-down {
                 border: none;
             }
             QComboBox QAbstractItemView {
-                background-color: #3c3c3c;
-                color: #cccccc;
-                selection-background-color: #0e639c;
+                background-color: #1a1a2e;
+                color: #e8e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 12px;
+                selection-background-color: rgba(124, 77, 255, 0.25);
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(155, 89, 182, 0.3),
+                    stop:1 rgba(124, 77, 255, 0.3));
+                color: white;
             }
         """)
         self.table.setCellWidget(row, 2, combo)
@@ -385,15 +508,12 @@ class VmTable(QWidget):
         sample_item.setFlags(sample_item.flags() | Qt.ItemFlag.ItemIsEditable)
         self.table.setItem(row, 4, sample_item)
         
-        # Прокручиваем к новой строке
         self.table.scrollToBottom()
     
     def add_empty_variable(self):
-        """Добавляет пустую переменную для заполнения"""
         self.add_variable("new_var", "", "Static", "", "")
     
     def remove_selected(self):
-        """Удаляет выбранные строки"""
         selected_rows = set()
         for item in self.table.selectedItems():
             selected_rows.add(item.row())
@@ -402,11 +522,9 @@ class VmTable(QWidget):
             self.table.removeRow(row)
     
     def clear_all(self):
-        """Очищает всю таблицу"""
         self.table.setRowCount(0)
     
     def get_all_variables(self):
-        """Возвращает все переменные в виде списка словарей"""
         variables = []
         for row in range(self.table.rowCount()):
             name_item = self.table.item(row, 0)
@@ -425,12 +543,6 @@ class VmTable(QWidget):
         return variables
     
     def import_from_select(self, url: str, xpath: str, text: str, tag: str, alt: str = ""):
-        """Импортирует данные из режима Select в таблицу с умным именованием"""
-        
-        # Определяем базовое имя по приоритетам:
-        # 1. Если есть text (не пустой) → используем text
-        # 2. Если это картинка (tag == IMG) и есть alt → используем alt
-        # 3. Иначе → empty
         if text and text.strip():
             base_name = text.strip()[:30]
         elif tag.upper() == "IMG" and alt and alt.strip():
@@ -438,29 +550,24 @@ class VmTable(QWidget):
         else:
             base_name = "empty"
         
-        # Очищаем имя от недопустимых символов
         base_name = re.sub(r'[^a-zA-Z0-9_а-яА-ЯёЁ\s-]', '', base_name)
         base_name = base_name.replace(' ', '_')
         
-        # Если после очистки имя пустое, используем "empty"
         if not base_name:
             base_name = "empty"
         
-        # Проверяем, сколько раз уже встречалось такое имя
         existing_names = []
         for row in range(self.table.rowCount()):
             name_item = self.table.item(row, 0)
             if name_item:
                 existing_names.append(name_item.text())
         
-        # Если имя уже существует, добавляем номер
         final_name = base_name
         counter = 1
         while final_name in existing_names:
             counter += 1
             final_name = f"{base_name}_{counter}"
         
-        # Добавляем переменную в таблицу
         self.add_variable(
             name=final_name,
             xpath=xpath,

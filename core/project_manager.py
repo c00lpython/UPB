@@ -1,17 +1,19 @@
+# core/project_manager.py
+
 import json
 import os
 import shutil
 import openpyxl
 from datetime import datetime
-from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWebEngineCore import QWebEngineProfile
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtWebEngineCore import QWebEngineProfile
 
 
 class ProjectManager(QObject):
     """Управляет сохранением и загрузкой проектов"""
     
-    project_loaded = pyqtSignal(dict)
-    project_saved = pyqtSignal(str)
+    project_loaded = Signal(dict)
+    project_saved = Signal(str)
     
     def __init__(self):
         super().__init__()
@@ -34,7 +36,7 @@ class ProjectManager(QObject):
             if item.startswith(temp_pattern) and os.path.isdir(item_path):
                 try:
                     shutil.rmtree(item_path, ignore_errors=True)
-                except:
+                except Exception:
                     pass
 
     def save_latest_project(self, project_name: str):
@@ -42,7 +44,7 @@ class ProjectManager(QObject):
         try:
             with open(self.latest_project_file, 'w', encoding='utf-8') as f:
                 f.write(f"LatestProject = {project_name}\n")
-        except:
+        except Exception:
             pass
 
     def get_latest_project(self) -> str:
@@ -56,7 +58,7 @@ class ProjectManager(QObject):
                             project_path = os.path.join(self.projects_dir, project_name)
                             if os.path.exists(project_path):
                                 return project_name
-        except:
+        except Exception:
             pass
         return None
 
@@ -76,7 +78,7 @@ class ProjectManager(QObject):
                             "modified": meta.get("modified", ""),
                             "variables_count": meta.get("variables_count", 0)
                         })
-                    except:
+                    except Exception:
                         projects.append({"name": item, "created": "", "modified": "", "variables_count": 0})
         return projects
     
