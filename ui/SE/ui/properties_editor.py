@@ -1,12 +1,12 @@
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
+from PySide6.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
 
 
 class IntelliSensePopup(QWidget):
     """Всплывающее окно IntelliSense"""
     
-    item_selected = pyqtSignal(str)
+    item_selected = Signal(str)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -565,7 +565,7 @@ class SearchableComboBox(QComboBox):
 class PropertiesEditor(QWidget):
     """Редактор свойств блоков"""
     
-    property_changed = pyqtSignal(int, str, object)
+    property_changed = Signal(int, str, object)
     
     def __init__(self, get_variables_callback=None, parent=None):
         super().__init__(parent)

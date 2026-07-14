@@ -1,6 +1,6 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtCore import QUrl, QTimer
+from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtCore import QUrl, QTimer
 
 
 class DevToolsPanel(QWidget):
@@ -15,6 +15,7 @@ class DevToolsPanel(QWidget):
         
         self.current_web_view = None
         self.attempts = 0
+        self.browser_widget = None
     
     def attach_to_browser(self, browser_widget):
         """Связывает DevTools с браузером"""
@@ -69,7 +70,7 @@ class DevToolsPanel(QWidget):
         
         try:
             self.devtools_view.page().runJavaScript(js, callback)
-        except:
+        except Exception:
             pass
     
     def select_first_page(self):

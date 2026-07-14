@@ -1,14 +1,15 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
-from PyQt6.QtCore import QUrl, QTimer, pyqtSignal
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
+from PySide6.QtCore import QUrl, QTimer, Signal
 import os
+import json
 
 
 class CustomWebEnginePage(QWebEnginePage):
     """Кастомная страница для перехвата console.log"""
     
-    selector_captured = pyqtSignal(str, str, str, str, str)
+    selector_captured = Signal(str, str, str, str, str)
     
     def __init__(self, profile, parent=None):
         # Создаём страницу с профилем
@@ -18,7 +19,6 @@ class CustomWebEnginePage(QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
         if message.startswith('[UPB_SELECT]'):
             try:
-                import json
                 json_str = message.replace('[UPB_SELECT]', '')
                 data = json.loads(json_str)
                 
@@ -38,7 +38,7 @@ class CustomWebEnginePage(QWebEnginePage):
 class BrowserTab(QWidget):
     """Отдельная вкладка браузера"""
     
-    selector_captured = pyqtSignal(str, str, str, str, str)
+    selector_captured = Signal(str, str, str, str, str)
     
     def __init__(self, profile, tab_id: int, url: str = "https://google.com", parent=None):
         super().__init__(parent)

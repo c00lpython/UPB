@@ -1,15 +1,15 @@
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QComboBox, QWidget, 
     QVBoxLayout, QHBoxLayout, QPushButton, QHeaderView,
     QLineEdit, QMenu, QApplication
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PySide6.QtCore import Qt, Signal
 import re
 
 
 class VmTable(QWidget):
     # Сигнал для открытия в браузере
-    view_in_browser_requested = pyqtSignal(str, str)  # url, xpath
+    view_in_browser_requested = Signal(str, str)  # url, xpath
     
     def __init__(self):
         super().__init__()

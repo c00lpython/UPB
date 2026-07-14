@@ -1,5 +1,5 @@
-from PyQt6.QtWidgets import QTextEdit, QWidget, QVBoxLayout
-from PyQt6.QtCore import QDateTime
+from PySide6.QtWidgets import QTextEdit, QWidget, QVBoxLayout
+from PySide6.QtCore import QDateTime
 
 
 class ConsoleWidget(QWidget):

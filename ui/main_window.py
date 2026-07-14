@@ -1,12 +1,12 @@
 # ui/main_window.py
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QFrame, QLabel, QPushButton, QTextEdit,
     QStackedWidget, QListWidget, QListWidgetItem, QLineEdit,
-    QTextEdit, QGroupBox, QGridLayout, QMessageBox, QInputDialog
+    QGroupBox, QGridLayout, QMessageBox, QInputDialog
 )
-from PyQt6.QtCore import Qt, QDateTime, QUrl, QTimer
-from PyQt6.QtGui import QKeyEvent
+from PySide6.QtCore import Qt, QDateTime, QUrl, QTimer, Signal
+from PySide6.QtGui import QKeyEvent
 from ui.browser_widget import BrowserWidget
 from ui.vm_table import VmTable
 from ui.SE.script_editor import ScriptEditor
@@ -405,7 +405,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        from PyQt6.QtWebEngineCore import QWebEngineProfile
+        from PySide6.QtWebEngineCore import QWebEngineProfile
         
         # Проверяем, есть ли открытый проект
         if self.project_manager and self.project_manager.current_project:
@@ -432,7 +432,6 @@ class MainWindow(QMainWindow):
             
         else:
             # Нет открытого проекта — создаём временный профиль
-            import uuid
             temp_id = str(uuid.uuid4())[:8]
             profile = QWebEngineProfile(f"Temporary_{temp_id}")
             profile.setPersistentStoragePath(f"temp_profile_{temp_id}")
@@ -730,7 +729,7 @@ class MainWindow(QMainWindow):
             
             success, result = self.project_manager.create_project(name)
             if success:
-                from PyQt6.QtWebEngineCore import QWebEngineProfile
+                from PySide6.QtWebEngineCore import QWebEngineProfile
                 project_path = os.path.join(self.project_manager.projects_dir, name)
                 profile_path = os.path.join(project_path, "profile")
                 
@@ -810,7 +809,7 @@ class MainWindow(QMainWindow):
                 if old_browser and hasattr(old_browser, 'cleanup'):
                     try:
                         old_browser.cleanup()
-                    except:
+                    except Exception:
                         pass
                 splitter.insertWidget(0, new_browser_widget)
                 if old_browser:
@@ -835,7 +834,7 @@ class MainWindow(QMainWindow):
         project_data, msg = self.project_manager.load_project(project_name)
         
         if project_data:
-            from PyQt6.QtWebEngineCore import QWebEngineProfile
+            from PySide6.QtWebEngineCore import QWebEngineProfile
             project_path = os.path.join(self.project_manager.projects_dir, project_name)
             profile_path = os.path.join(project_path, "profile")
             
@@ -1025,7 +1024,7 @@ chat_id =
             if hasattr(self, 'browser_widget') and hasattr(self.browser_widget, 'cleanup'):
                 self.browser_widget.cleanup()
             
-            from PyQt6.QtWebEngineCore import QWebEngineProfile
+            from PySide6.QtWebEngineCore import QWebEngineProfile
             temp_id = str(uuid.uuid4())[:8]
             temp_profile = QWebEngineProfile(f"Temporary_{temp_id}")
             temp_profile.setPersistentStoragePath(f"temp_profile_{temp_id}")

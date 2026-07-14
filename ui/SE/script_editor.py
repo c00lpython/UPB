@@ -1,8 +1,8 @@
 import os
 import json
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
+from PySide6.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
 
 from ui.SE.ui.blocks_palette import BlocksPalette
 from ui.SE.ui.canvas_widget import CanvasWidget
@@ -13,7 +13,7 @@ from ui.SE.core.compiler import UPBCompiler, compile_workflow
 
 class ScriptEditor(QWidget):
     
-    log_signal = pyqtSignal(str)
+    log_signal = Signal(str)
     
     def __init__(self, project_manager=None, parent=None):
         super().__init__(parent)

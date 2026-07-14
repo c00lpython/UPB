@@ -1,5 +1,5 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QPushButton, QHBoxLayout
-from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QPushButton, QHBoxLayout
+from PySide6.QtCore import Qt, Signal, QObject
 
 from ui.browser_tab import BrowserTab
 
@@ -31,9 +31,9 @@ class TabTitleUpdater(QObject):
 class BrowserWidget(QWidget):
     """Браузер с поддержкой множества вкладок"""
     
-    url_changed = pyqtSignal(str)
-    devtools_changed = pyqtSignal(object)
-    selector_captured = pyqtSignal(str, str, str, str, str)
+    url_changed = Signal(str)
+    devtools_changed = Signal(object)
+    selector_captured = Signal(str, str, str, str, str)
     
     def __init__(self, profile, parent=None):
         super().__init__(parent)
@@ -53,7 +53,7 @@ class BrowserWidget(QWidget):
         self._is_alive = True
         
         if self.profile is None:
-            from PyQt6.QtWebEngineCore import QWebEngineProfile
+            from PySide6.QtWebEngineCore import QWebEngineProfile
             self.profile = QWebEngineProfile("Temporary")
         
         layout = QVBoxLayout(self)

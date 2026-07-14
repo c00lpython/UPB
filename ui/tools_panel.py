@@ -1,11 +1,11 @@
-from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QFrame
-from PyQt6.QtCore import pyqtSignal
+from PySide6.QtWidgets import QVBoxLayout, QPushButton, QFrame
+from PySide6.QtCore import Signal
 
 
 class ToolsPanel(QFrame):
-    select_clicked = pyqtSignal()
-    build_clicked = pyqtSignal()
-    run_clicked = pyqtSignal()
+    select_clicked = Signal()
+    build_clicked = Signal()
+    run_clicked = Signal()
     
     def __init__(self):
         super().__init__()

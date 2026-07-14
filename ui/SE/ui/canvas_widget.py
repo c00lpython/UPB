@@ -1,10 +1,9 @@
 import math
 import json
 from typing import Dict, List, Optional, Any
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
-from PyQt6.QtWidgets import QGraphicsItem
+from PySide6.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
 from ui.SE.core.models import Block, Connection, IfBlock
 
 
@@ -1215,8 +1214,8 @@ class GraphEdge(QGraphicsPathItem):
 class CanvasWidget(QGraphicsView):
     """Виджет канваса с поддержкой соединений"""
     
-    block_selected = pyqtSignal(object)
-    block_double_clicked = pyqtSignal(object)
+    block_selected = Signal(object)
+    block_double_clicked = Signal(object)
     
     def __init__(self):
         print("🏁 [CANVAS] __init__ START")
