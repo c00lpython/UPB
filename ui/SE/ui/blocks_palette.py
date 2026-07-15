@@ -1,4 +1,4 @@
-# ui/SE/ui/blocks_palette.py - полная версия с маркерами
+# ui/SE/ui/blocks_palette.py - исправленный (без сетки)
 
 import json
 from PySide6.QtWidgets import *
@@ -25,44 +25,81 @@ class BlocksPalette(QWidget):
         header.setFixedHeight(40)
         header.setStyleSheet("""
             QLabel {
-                background-color: #2d2d2d;
-                color: #3d5afe;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #2d2d2d,
+                    stop:1 #1a1a2e);
+                color: #7c4dff;
                 font-weight: bold;
                 font-size: 12px;
                 padding-left: 15px;
-                border-bottom: 1px solid #444;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                font-family: 'Inter', 'Segoe UI', sans-serif;
             }
         """)
         layout.addWidget(header)
         
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        
+        # === ПОЛНОЕ ИСПРАВЛЕНИЕ: Заменяем viewport ===
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        
+        # Создаем кастомный viewport с нужным фоном
+        viewport = QWidget()
+        viewport.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #1a1a2e,
+                    stop:1 #0a0a1a);
+            }
+        """)
+        scroll.setViewport(viewport)
+        
         scroll.setStyleSheet("""
             QScrollArea {
                 border: none;
-                background: #252525;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #1a1a2e,
+                    stop:1 #0a0a1a);
             }
             QScrollBar:vertical {
-                background: #252525;
-                width: 10px;
+                background: white;
+                width: 8px;
+                border-radius: 4px;
+                margin: 2px;
             }
             QScrollBar::handle:vertical {
-                background: #444;
-                border-radius: 5px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.8),
+                    stop:1 rgba(124, 77, 255, 0.8));
+                border-radius: 4px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 1.0),
+                    stop:1 rgba(124, 77, 255, 1.0));
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
         
         self.container = QWidget()
-        self.container.setStyleSheet("background: #252525;")
+        self.container.setStyleSheet("""
+            QWidget {
+                background: transparent;
+            }
+        """)
         self.container_layout = QVBoxLayout(self.container)
         self.container_layout.setContentsMargins(10, 10, 10, 10)
-        self.container_layout.setSpacing(8)
+        self.container_layout.setSpacing(10)
         self.container_layout.addStretch()
         
         scroll.setWidget(self.container)
         layout.addWidget(scroll)
         print("🔧 [PALETTE] setup_ui END")
-    
+
     def create_blocks(self):
         print("📦 [PALETTE] create_blocks START")
         blocks = [
@@ -88,20 +125,24 @@ class BlocksPalette(QWidget):
     
     def add_block(self, icon: str, name: str, node_type: str, color: str):
         print(f"➕ [PALETTE] add_block: {node_type} - {name}")
+        
         widget = QFrame()
         widget.setFixedHeight(50)
+        widget.setCursor(Qt.CursorShape.PointingHandCursor)
         widget.setStyleSheet(f"""
             QFrame {{
-                background-color: #2a2a2a;
-                border-radius: 6px;
-                border: 1px solid #3a3a3a;
+                background-color: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 10px;
             }}
             QFrame:hover {{
-                background-color: #333;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(255, 255, 255, 0.08),
+                    stop:0.5 rgba(255, 255, 255, 0.02),
+                    stop:1 rgba(255, 255, 255, 0.08));
                 border: 1px solid {color};
             }}
         """)
-        widget.setCursor(Qt.CursorShape.PointingHandCursor)
         
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(10, 5, 10, 5)
@@ -112,19 +153,35 @@ class BlocksPalette(QWidget):
         icon_label.setStyleSheet(f"""
             QLabel {{
                 background-color: {color};
-                border-radius: 6px;
+                border-radius: 8px;
                 font-size: 18px;
                 qproperty-alignment: AlignCenter;
             }}
         """)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
         
         name_label = QLabel(name)
-        name_label.setStyleSheet("color: white; font-weight: bold; font-size: 12px;")
+        name_label.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.8);
+                font-weight: 500;
+                font-size: 12px;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+                background: transparent;
+            }
+        """)
         layout.addWidget(name_label, 1)
         
         plus = QLabel("+")
-        plus.setStyleSheet("color: #666; font-size: 16px; font-weight: bold;")
+        plus.setStyleSheet("""
+            QLabel {
+                color: rgba(255, 255, 255, 0.2);
+                font-size: 16px;
+                font-weight: bold;
+                background: transparent;
+            }
+        """)
         layout.addWidget(plus)
         
         widget.mousePressEvent = lambda e, nt=node_type, ic=icon, n=name, c=color: self.start_drag(e, nt, ic, n, c)
@@ -143,17 +200,16 @@ class BlocksPalette(QWidget):
             print(f"📄 [PALETTE] Mime data set: {data}")
             drag.setMimeData(mime)
             
-            # Создаем pixmap для отображения при перетаскивании
             pixmap = QPixmap(120, 40)
             pixmap.fill(Qt.GlobalColor.transparent)
             painter = QPainter(pixmap)
             painter.setBrush(QBrush(QColor(color)))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(0, 0, 120, 40, 6, 6)
+            painter.drawRoundedRect(0, 0, 120, 40, 8, 8)
             painter.setPen(QPen(QColor("white")))
-            painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            painter.setFont(QFont("Inter", 10, QFont.Weight.Bold))
             painter.drawText(QRect(40, 0, 80, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
-            painter.setFont(QFont("Arial", 16))
+            painter.setFont(QFont("Segoe UI", 16))
             painter.drawText(QRect(5, 0, 35, 40), Qt.AlignmentFlag.AlignCenter, icon)
             painter.end()
             

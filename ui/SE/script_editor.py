@@ -1,3 +1,5 @@
+# ui/SE/script_editor.py
+
 import os
 import json
 from PySide6.QtWidgets import *
@@ -9,6 +11,7 @@ from ui.SE.ui.canvas_widget import CanvasWidget
 from ui.SE.ui.properties_editor import PropertiesEditor
 from ui.SE.core.serialization import upb_serializer
 from ui.SE.core.compiler import UPBCompiler, compile_workflow
+from ui.animated_button import GradientFollowButton, AnimatedButton
 
 
 class ScriptEditor(QWidget):
@@ -62,43 +65,56 @@ class ScriptEditor(QWidget):
         
         main_splitter.setSizes([250, 600, 320])
         
-        # Нижняя панель
+        # ========== НИЖНЯЯ ПАНЕЛЬ ==========
         bottom_bar = QWidget()
         bottom_bar.setFixedHeight(55)
-        bottom_bar.setStyleSheet("QWidget { background-color: #2d2d2d; border-top: 1px solid #444; }")
+        bottom_bar.setStyleSheet("""
+            QWidget { 
+                background-color: #2d2d2d; 
+                border-top: 1px solid #444; 
+            }
+        """)
         
         bottom_layout = QHBoxLayout(bottom_bar)
         bottom_layout.setContentsMargins(15, 8, 15, 8)
         bottom_layout.setSpacing(15)
         
-        self.btn_compile = QPushButton("⚙️ Compile to Script")
+        # ui/SE/script_editor.py
+
+        # ========== ВСЕ КНОПКИ СО СВЕЧЕНИЕМ ==========
+        self.btn_compile = GradientFollowButton("⚙️ Compile to Script")
+        self.btn_compile.setProperty("type", "primary")
         self.btn_compile.setMinimumWidth(160)
         self.btn_compile.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_compile.setStyleSheet("QPushButton { background-color: #0e639c; color: white; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #1177bb; }")
+        self.btn_compile.setFixedHeight(38)
         self.btn_compile.clicked.connect(self.compile_workflow)
-        
-        self.btn_clear = QPushButton("🗑️ Clear Canvas")
+
+        self.btn_clear = GradientFollowButton("🗑️ Clear Canvas")  # Тоже с эффектом свечения
+        self.btn_clear.setProperty("type", "danger")  # Красный цвет
         self.btn_clear.setMinimumWidth(120)
         self.btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_clear.setStyleSheet("QPushButton { background-color: #4a4a4a; color: #ddd; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #5a5a5a; }")
+        self.btn_clear.setFixedHeight(38)
         self.btn_clear.clicked.connect(self.clear_canvas)
-        
-        self.btn_save = QPushButton("💾 Save Workflow")
-        self.btn_save.setMinimumWidth(130)
+
+        self.btn_save = GradientFollowButton("💾 Save Workflow")
+        self.btn_save.setProperty("type", "primary")
+        self.btn_save.setMinimumWidth(140)
         self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_save.setStyleSheet("QPushButton { background-color: #2e7d32; color: white; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #1b5e20; }")
+        self.btn_save.setFixedHeight(38)
         self.btn_save.clicked.connect(self.save_workflow)
-        
-        self.btn_load = QPushButton("📂 Load Workflow")
-        self.btn_load.setMinimumWidth(130)
+
+        self.btn_load = GradientFollowButton("📂 Load Workflow")
+        self.btn_load.setProperty("type", "default")
+        self.btn_load.setMinimumWidth(140)
         self.btn_load.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_load.setStyleSheet("QPushButton { background-color: #6c3483; color: white; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #512e5f; }")
+        self.btn_load.setFixedHeight(38)
         self.btn_load.clicked.connect(self.load_workflow)
-        
-        self.btn_new = QPushButton("✨ New Workflow")
-        self.btn_new.setMinimumWidth(130)
+
+        self.btn_new = GradientFollowButton("✨ New Workflow")
+        self.btn_new.setProperty("type", "primary")
+        self.btn_new.setMinimumWidth(140)
         self.btn_new.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_new.setStyleSheet("QPushButton { background-color: #e67e22; color: white; border: none; border-radius: 5px; padding: 8px 16px; font-weight: bold; font-size: 12px; } QPushButton:hover { background-color: #d35400; }")
+        self.btn_new.setFixedHeight(38)
         self.btn_new.clicked.connect(self.new_workflow)
         
         bottom_layout.addWidget(self.btn_compile)
@@ -108,11 +124,25 @@ class ScriptEditor(QWidget):
         bottom_layout.addWidget(self.btn_new)
         
         self.status_label = QLabel("● Ready")
-        self.status_label.setStyleSheet("QLabel { color: #2ecc71; font-size: 11px; font-weight: bold; padding: 0 10px; }")
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #2ecc71;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 0 10px;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+            }
+        """)
         bottom_layout.addWidget(self.status_label, 1)
         
         self.block_count_label = QLabel("0 blocks")
-        self.block_count_label.setStyleSheet("color: #888; font-size: 11px;")
+        self.block_count_label.setStyleSheet("""
+            QLabel {
+                color: #888;
+                font-size: 11px;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+            }
+        """)
         bottom_layout.addWidget(self.block_count_label)
         
         main_layout = QVBoxLayout(self)

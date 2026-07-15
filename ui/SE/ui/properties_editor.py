@@ -1,3 +1,5 @@
+# ui/SE/ui/properties_editor.py
+
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtGui import *
@@ -43,7 +45,14 @@ class IntelliSensePopup(QWidget):
         
         self.header = QLabel()
         self.header.setFixedHeight(24)
-        self.header.setStyleSheet("color: #999; font-size: 9px; padding: 4px 12px 2px 12px; background: transparent; border-bottom: 1px solid #333;")
+        self.header.setStyleSheet("""
+            color: #999; 
+            font-size: 9px; 
+            padding: 4px 12px 2px 12px; 
+            background: transparent; 
+            border-bottom: 1px solid #333;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+        """)
         self.header.hide()
         content_layout.addWidget(self.header)
         
@@ -56,7 +65,7 @@ class IntelliSensePopup(QWidget):
                 background-color: transparent;
                 color: #d4d4d4;
                 border: none;
-                font-family: 'Consolas', monospace;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
                 font-size: 12px;
                 outline: none;
                 padding: 4px 0px;
@@ -64,6 +73,7 @@ class IntelliSensePopup(QWidget):
             QListWidget::item {
                 padding: 6px 12px;
                 border-left: 3px solid transparent;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
             }
             QListWidget::item:selected {
                 background-color: #094771;
@@ -74,13 +84,25 @@ class IntelliSensePopup(QWidget):
                 background-color: #2a2d2e;
             }
             QScrollBar:vertical {
-                background: #1e1e1e;
-                width: 6px;
+                background: white;
+                width: 8px;
+                border-radius: 4px;
+                margin: 2px;
             }
             QScrollBar::handle:vertical {
-                background: #424242;
-                border-radius: 3px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.8),
+                    stop:1 rgba(124, 77, 255, 0.8));
+                border-radius: 4px;
                 min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 1.0),
+                    stop:1 rgba(124, 77, 255, 1.0));
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
         content_layout.addWidget(self.list_widget)
@@ -158,6 +180,20 @@ class CompleterLineEdit(QLineEdit):
         self._popup = None
         self._completion_words = []
         self._variables_data = {}
+        self.setStyleSheet("""
+            QLineEdit {
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+                font-size: 11px;
+                background-color: #2a2a2a;
+                color: #ccc;
+                border: 1px solid #444;
+                border-radius: 4px;
+                padding: 6px 8px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #3d5afe;
+            }
+        """)
     
     def set_completion_words(self, words: list, variables_data: dict = None):
         self._completion_words = sorted(set(words))
@@ -277,7 +313,7 @@ class CompleterLineEdit(QLineEdit):
                     if item:
                         self._insert_completion(item)
                         self._show_popup()
-                    return True  # ПОГЛОЩАЕМ Tab
+                    return True
                 elif key == Qt.Key.Key_Down:
                     self._popup.select_next()
                     return True
@@ -336,20 +372,50 @@ class SearchableComboBox(QComboBox):
         
         self.setStyleSheet("""
             QComboBox {
-                background-color: #3a3a3a;
-                color: #ddd;
-                border: 1px solid #555;
+                background-color: #2a2a2a;
+                color: #ccc;
+                border: 1px solid #444;
                 border-radius: 4px;
                 padding: 6px 8px;
                 font-size: 11px;
                 min-width: 180px;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
             }
-            QComboBox:focus { border: 1px solid #3d5afe; }
+            QComboBox:focus { 
+                border: 1px solid #3d5afe; 
+            }
             QComboBox QAbstractItemView {
-                background-color: #3a3a3a;
-                color: #ddd;
+                background-color: #2a2a2a;
+                color: #ccc;
                 selection-background-color: #3d5afe;
                 min-width: 300px;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+            }
+            QComboBox QAbstractItemView::item {
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+                padding: 6px 10px;
+            }
+            QComboBox QAbstractItemView QScrollBar:vertical {
+                background: white;
+                width: 8px;
+                border-radius: 4px;
+                margin: 2px;
+            }
+            QComboBox QAbstractItemView QScrollBar::handle:vertical {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.8),
+                    stop:1 rgba(124, 77, 255, 0.8));
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 1.0),
+                    stop:1 rgba(124, 77, 255, 1.0));
+            }
+            QComboBox QAbstractItemView QScrollBar::add-line:vertical,
+            QComboBox QAbstractItemView QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
     
@@ -524,7 +590,7 @@ class SearchableComboBox(QComboBox):
                     if item:
                         self._insert_completion(item)
                         self._show_popup()
-                    return True  # ПОГЛОЩАЕМ Tab
+                    return True
                 elif key == Qt.Key.Key_Down:
                     self._popup.select_next()
                     return True
@@ -562,17 +628,156 @@ class SearchableComboBox(QComboBox):
                 self._popup.hide()
 
 
+# ============================================================================
+# PROPERTIES EDITOR С ГЛОБАЛЬНЫМ ТРЕКЕРОМ
+# ============================================================================
+
 class PropertiesEditor(QWidget):
-    """Редактор свойств блоков"""
+    """Редактор свойств блоков с глобальным трекером мыши"""
     
     property_changed = Signal(int, str, object)
     
     def __init__(self, get_variables_callback=None, parent=None):
         super().__init__(parent)
+        
+        self._mouse_pos = (0.5, 0.5)
+        self._hover_progress = 0.0
+        self._show_glow = False
+        self._is_hovering = False
+        self._target_progress = 0.0
+        self._tracker_connected = False
+        
+        # Анимация для плавного появления свечения
+        self.hover_anim = QPropertyAnimation(self, b"hover_progress")
+        self.hover_anim.setDuration(150)
+        self.hover_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
         self.current_block = None
         self.get_variables_callback = get_variables_callback
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setObjectName("PropertiesEditor")
+        
+        # Подключаемся к глобальному трекеру
+        self._setup_global_tracker()
+        
         self.setup_ui()
+    
+    def _setup_global_tracker(self):
+        """Подключается к глобальному трекеру мыши"""
+        if self._tracker_connected:
+            return
+            
+        try:
+            from ui.main_window import mouse_tracker
+            mouse_tracker.mouse_moved.connect(self._on_global_mouse_move)
+            mouse_tracker.widget_hovered.connect(self._on_global_widget_hover)
+            self._tracker_connected = True
+            print("✅ PropertiesEditor connected to mouse tracker")
+        except ImportError:
+            QTimer.singleShot(100, self._setup_global_tracker)
+        except Exception as e:
+            print(f"⚠️ Failed to connect to mouse tracker: {e}")
+    
+    def _on_global_mouse_move(self, x, y):
+        """Обработчик движения мыши от глобального трекера"""
+        if not self._is_hovering:
+            return
+        
+        if self.is_deleted():
+            return
+            
+        widget_pos = self.mapFromGlobal(QPoint(x, y))
+        rect = self.rect()
+        
+        if rect.contains(widget_pos):
+            if rect.width() > 0 and rect.height() > 0:
+                norm_x = widget_pos.x() / rect.width()
+                norm_y = widget_pos.y() / rect.height()
+                self._mouse_pos = (max(0, min(1, norm_x)), max(0, min(1, norm_y)))
+                self.update()
+    
+    def _on_global_widget_hover(self, widget):
+        """Обработчик смены виджета под курсором"""
+        if self.is_deleted():
+            return
+        
+        is_over = False
+        try:
+            is_over = widget == self or (widget and self.isAncestorOf(widget)) if widget else False
+        except RuntimeError:
+            return
+        
+        if is_over and not self._is_hovering:
+            self._is_hovering = True
+            self._show_glow = True
+            self._target_progress = 1.0
+            self.hover_anim.stop()
+            self.hover_anim.setStartValue(self._hover_progress)
+            self.hover_anim.setEndValue(1.0)
+            self.hover_anim.start()
+            
+        elif not is_over and self._is_hovering:
+            self._is_hovering = False
+            self._show_glow = False
+            self._target_progress = 0.0
+            self.hover_anim.stop()
+            self.hover_anim.setStartValue(self._hover_progress)
+            self.hover_anim.setEndValue(0.0)
+            self.hover_anim.start()
+    
+    def is_deleted(self):
+        try:
+            _ = self.windowTitle()
+            return False
+        except RuntimeError:
+            return True
+    
+    @Property(float)
+    def hover_progress(self):
+        return self._hover_progress
+    
+    @hover_progress.setter
+    def hover_progress(self, value):
+        if abs(self._hover_progress - value) > 0.001:
+            self._hover_progress = value
+            self.update()
+    
+    def paint_glow_effect(self, painter):
+        """Рисует эффект свечения только для фона виджета"""
+        if self._is_hovering and self._hover_progress > 0.01:
+            painter.save()
+            
+            rect = self.rect()
+            x, y = self._mouse_pos
+            
+            center_x = rect.width() * x
+            center_y = rect.height() * y
+            radius = max(rect.width(), rect.height()) * 0.5 * self._hover_progress
+            
+            gradient = QRadialGradient(
+                center_x, center_y, radius,
+                center_x, center_y
+            )
+            
+            color = QColor(155, 89, 182)
+            alpha = int(40 * self._hover_progress)
+            color.setAlpha(alpha)
+            
+            gradient.setColorAt(0, color)
+            gradient.setColorAt(1, QColor(color.red(), color.green(), color.blue(), 0))
+            
+            painter.setBrush(QBrush(gradient))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(rect, 4, 4)
+            
+            pen_color = QColor(155, 89, 182)
+            pen_alpha = int(60 * self._hover_progress)
+            pen_color.setAlpha(pen_alpha)
+            painter.setPen(QPen(pen_color, 1.5))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(1, 1, -2, -2), 4, 4)
+            
+            painter.restore()
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -583,12 +788,13 @@ class PropertiesEditor(QWidget):
         self.header.setFixedHeight(40)
         self.header.setStyleSheet("""
             QLabel {
-                background-color: #2d2d2d;
+                background-color: #0a0a0a;
                 color: #3d5afe;
                 font-weight: bold;
                 font-size: 12px;
                 padding-left: 15px;
-                border-bottom: 1px solid #444;
+                border-bottom: 1px solid #1a1a1a;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
             }
         """)
         layout.addWidget(self.header)
@@ -596,13 +802,60 @@ class PropertiesEditor(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("""
-            QScrollArea { border: none; background: #252525; }
-            QScrollBar:vertical { background: #252525; width: 10px; }
-            QScrollBar::handle:vertical { background: #444; border-radius: 5px; }
+            QScrollArea { 
+                border: none; 
+                background: transparent; 
+            }
+            QScrollBar:vertical {
+                background: white;
+                width: 8px;
+                border-radius: 4px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.6),
+                    stop:1 rgba(124, 77, 255, 0.6));
+                border-radius: 4px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.8),
+                    stop:1 rgba(124, 77, 255, 0.8));
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar:horizontal {
+                background: white;
+                height: 8px;
+                border-radius: 4px;
+                margin: 2px;
+            }
+            QScrollBar::handle:horizontal {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(155, 89, 182, 0.6),
+                    stop:1 rgba(124, 77, 255, 0.6));
+                border-radius: 4px;
+                min-width: 30px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(155, 89, 182, 0.8),
+                    stop:1 rgba(124, 77, 255, 0.8));
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+            }
         """)
         
         self.container = QWidget()
-        self.container.setStyleSheet("background: #252525;")
+        self.container.setStyleSheet("""
+            QWidget {
+                background: transparent;
+            }
+        """)
         self.container_layout = QVBoxLayout(self.container)
         self.container_layout.setContentsMargins(15, 15, 15, 15)
         self.container_layout.setSpacing(12)
@@ -613,16 +866,49 @@ class PropertiesEditor(QWidget):
         
         info_panel = QWidget()
         info_panel.setFixedHeight(50)
-        info_panel.setStyleSheet("background: #2d2d2d; border-top: 1px solid #444;")
+        info_panel.setStyleSheet("background: #0a0a0a; border-top: 1px solid #1a1a1a;")
         info_layout = QHBoxLayout(info_panel)
         info_layout.setContentsMargins(15, 5, 15, 5)
         
         self.info_label = QLabel("Select a block to edit")
-        self.info_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.info_label.setStyleSheet("""
+            color: #555; 
+            font-size: 11px;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+        """)
         info_layout.addWidget(self.info_label)
         info_layout.addStretch()
         
         layout.addWidget(info_panel)
+
+
+    def paintEvent(self, event):
+        """Отрисовка с эффектом свечения только для фона"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        rect = self.rect()
+        
+        # 1. Черный фон
+        painter.fillRect(rect, QColor(10, 10, 10))
+        
+        # 2. Рамка
+        painter.setPen(QPen(QColor(30, 30, 30), 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), 4, 4)
+        
+        # 3. Эффект свечения ТОЛЬКО для фона
+        self.paint_glow_effect(painter)
+        
+        painter.end()
+        
+        # Рисуем дочерние виджеты поверх (без изменений)
+        for child in self.children():
+            if isinstance(child, QWidget) and child.isVisible() and child != self:
+                child_painter = QPainter(self)
+                child_painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                child.render(child_painter, child.pos())
+                child_painter.end()
     
     def get_variable_names(self) -> list:
         if self.get_variables_callback:
@@ -688,6 +974,7 @@ class PropertiesEditor(QWidget):
                 letter-spacing: 1px;
                 padding: 8px 0 4px 0;
                 border-bottom: 1px solid #3d5afe40;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
             }
         """)
         self.container_layout.insertWidget(self.container_layout.count() - 1, label)
@@ -706,7 +993,12 @@ class PropertiesEditor(QWidget):
         
         label = QLabel(self.format_key(key))
         label.setFixedWidth(110)
-        label.setStyleSheet("color: #ccc; font-size: 11px; font-weight: 500;")
+        label.setStyleSheet("""
+            color: #aaa; 
+            font-size: 11px; 
+            font-weight: 600;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+        """)
         label.setWordWrap(True)
         layout.addWidget(label)
         
@@ -716,7 +1008,7 @@ class PropertiesEditor(QWidget):
         type_icon = self.get_type_icon(value)
         if type_icon:
             icon_label = QLabel(type_icon)
-            icon_label.setStyleSheet("color: #666; font-size: 12px;")
+            icon_label.setStyleSheet("color: #555; font-size: 12px; font-family: 'Inter', 'Segoe UI', sans-serif;")
             layout.addWidget(icon_label)
         
         self.container_layout.insertWidget(self.container_layout.count() - 1, widget)
@@ -728,6 +1020,26 @@ class PropertiesEditor(QWidget):
             editor = QCheckBox()
             editor.setChecked(value)
             editor.stateChanged.connect(lambda state, k=key: self.on_change(k, state == Qt.CheckState.Checked))
+            editor.setStyleSheet("""
+                QCheckBox {
+                    font-family: 'Inter', 'Segoe UI', sans-serif;
+                    color: #aaa;
+                }
+                QCheckBox::indicator {
+                    width: 18px;
+                    height: 18px;
+                }
+                QCheckBox::indicator:unchecked {
+                    background-color: #1a1a1a;
+                    border: 1px solid #333;
+                    border-radius: 3px;
+                }
+                QCheckBox::indicator:checked {
+                    background-color: #3d5afe;
+                    border: 1px solid #3d5afe;
+                    border-radius: 3px;
+                }
+            """)
             return editor
         
         if isinstance(value, int):
@@ -768,7 +1080,6 @@ class PropertiesEditor(QWidget):
             variable_names = self.get_variable_names()
             variables_data = self.get_variables_data()
             editor.set_completion_words(variable_names, variables_data)
-            self.style_editor(editor)
             return editor
         
         if key in ["waitStrategy", "selectorType", "iterableType", "operator", "blockType", "parseMode", "outputFormat", "format", "extractType"]:
@@ -801,29 +1112,87 @@ class PropertiesEditor(QWidget):
         current = str(current_value) if current_value else items[0] if items else ""
         editor.setCurrentText(current)
         editor.currentTextChanged.connect(lambda v, k=key: self.on_change(k, v))
-        self.style_editor(editor)
+        editor.setStyleSheet("""
+            QComboBox {
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+                font-size: 11px;
+                background-color: #1a1a1a;
+                color: #aaa;
+                border: 1px solid #333;
+                border-radius: 4px;
+                padding: 6px 8px;
+            }
+            QComboBox:focus {
+                border: 1px solid #3d5afe;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 24px;
+            }
+            QComboBox::down-arrow {
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #666;
+                margin-right: 8px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #1a1a1a;
+                color: #aaa;
+                selection-background-color: #3d5afe;
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+            }
+            QComboBox QAbstractItemView::item {
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+                padding: 6px 10px;
+            }
+            QComboBox QAbstractItemView QScrollBar:vertical {
+                background: white;
+                width: 8px;
+                border-radius: 4px;
+                margin: 2px;
+            }
+            QComboBox QAbstractItemView QScrollBar::handle:vertical {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.6),
+                    stop:1 rgba(124, 77, 255, 0.6));
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(155, 89, 182, 0.8),
+                    stop:1 rgba(124, 77, 255, 0.8));
+            }
+            QComboBox QAbstractItemView QScrollBar::add-line:vertical,
+            QComboBox QAbstractItemView QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
         return editor
     
     def style_editor(self, widget):
         widget.setStyleSheet("""
-            QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
-                background-color: #3a3a3a;
-                color: #ddd;
-                border: 1px solid #555;
+            QLineEdit, QSpinBox, QDoubleSpinBox {
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+                font-size: 11px;
+                background-color: #1a1a1a;
+                color: #aaa;
+                border: 1px solid #333;
                 border-radius: 4px;
                 padding: 6px 8px;
-                font-size: 11px;
             }
-            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
+            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
                 border: 1px solid #3d5afe;
             }
-            QSpinBox::up-button, QSpinBox::down-button { background-color: #555; width: 20px; }
-            QComboBox::drop-down { border: none; width: 24px; }
-            QComboBox::down-arrow {
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 5px solid #aaa;
-                margin-right: 8px;
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #333;
+                width: 20px;
+                border: none;
+            }
+            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+                background-color: #333;
+                width: 20px;
+                border: none;
             }
         """)
     

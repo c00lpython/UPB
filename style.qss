@@ -1,12 +1,24 @@
 ﻿/* ============================================================
    UPB - MAIN STYLESHEET (style.qss)
-   РџРѕР»РЅР°СЏ РІРµСЂСЃРёСЏ СЃ РЅР°РІР±Р°СЂРѕРј Рё СЃС‚РµРєР»СЏРЅРЅС‹РјРё СЌС„С„РµРєС‚Р°РјРё
-   РђРґР°РїС‚РёСЂРѕРІР°РЅРѕ РґР»СЏ Qt/PySide6
-   РСЃРїСЂР°РІР»РµРЅРѕ: СѓР±СЂР°РЅС‹ РєРѕРЅС„Р»РёРєС‚С‹ РІС‹СЃРѕС‚ РґР»СЏ СЃРїР»РёС‚С‚РµСЂР°
+   ПОЛНАЯ ВЕРСИЯ С ЗАКРУГЛЁННЫМИ КНОПКАМИ
+   Адаптировано для PySide6
    ============================================================ */
 
+/* Шрифты */
+* {
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+}
+
+QLabel[code="true"] {
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+}
+
+QLabel[title="true"] {
+    font-family: 'Caladea', 'Georgia', serif;
+}
+
 /* ============================================================
-   Р“Р›РђР’РќРћР• РћРљРќРћ Р Р¤РћРќ
+   ГЛАВНОЕ ОКНО И ФОН
    ============================================================ */
 QMainWindow {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
@@ -23,7 +35,7 @@ QWidget {
 }
 
 /* ============================================================
-   QLABEL - Р—РђР“РћР›РћР’РљР
+   QLABEL
    ============================================================ */
 QLabel {
     color: #a0a0b8;
@@ -58,10 +70,7 @@ QLabel[logo="true"] {
         stop:0 #9b59b6,
         stop:0.5 #8e44ad,
         stop:1 #7c4dff);
-    -webkit-background-clip: text;
-    background-clip: text;
     color: transparent;
-    text-shadow: 0 0 30px rgba(124, 77, 255, 0.2);
 }
 
 QLabel[separator="true"] {
@@ -91,8 +100,41 @@ QLabel[accent="true"] {
     font-size: 14px;
 }
 
+QLabel[vm_title="true"] {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 0;
+    background: transparent;
+}
+
+QLabel[vm_stats="true"] {
+    color: #6a6a82;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 20px;
+}
+
+QLabel[vm_empty="true"] {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 48px 24px;
+    background-color: rgba(10, 10, 26, 0.5);
+    border: 1px dashed rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+}
+
+QLabel[center="true"] {
+    qproperty-alignment: AlignCenter;
+}
+
 /* ============================================================
-   РўРћРџ-Р‘РђР  / РќРђР’Р‘РђР  - РЎРўР•РљР›РЇРќРќР«Р™ Р­Р¤Р¤Р•РљРў
+   ТОП-БАР / НАВБАР
    ============================================================ */
 QFrame[topbar="true"] {
     background-color: rgba(20, 20, 30, 0.85);
@@ -103,7 +145,7 @@ QFrame[topbar="true"] {
     max-height: 44px;
 }
 
-/* ----- РљРќРћРџРљР Р’РљР›РђР”РћРљ ----- */
+/* ----- ТАБЫ ----- */
 QPushButton[tab="true"] {
     background-color: transparent;
     color: rgba(255, 255, 255, 0.55);
@@ -124,22 +166,10 @@ QPushButton[tab="true"][active="true"] {
     background-color: rgba(255, 255, 255, 0.08);
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
 }
 
-QPushButton[tab="true"][active="true"]::after {
-    content: "";
-    position: absolute;
-    bottom: 2px;
-    left: 20%;
-    right: 20%;
-    height: 2px;
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #9b59b6,
-        stop:1 #7c4dff);
-    border-radius: 2px;
-}
-
-/* ----- РљРќРћРџРљР РЈРџР РђР’Р›Р•РќРРЇ РћРљРќРћРњ ----- */
+/* ----- КНОПКИ УПРАВЛЕНИЯ ОКНОМ ----- */
 QPushButton[windowbtn="true"] {
     background-color: transparent;
     color: rgba(255, 255, 255, 0.5);
@@ -161,17 +191,20 @@ QPushButton[closebtn="true"]:hover {
 }
 
 /* ============================================================
-   QPUSHBUTTON - РћРЎРќРћР’РќР«Р• РЎРўРР›Р
+   QPUSHBUTTON - ВСЕ КНОПКИ С ЗАКРУГЛЕНИЯМИ 12px
    ============================================================ */
+
+/* ----- БАЗОВАЯ КНОПКА (12px закругление) ----- */
 QPushButton {
     background-color: rgba(255, 255, 255, 0.05);
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 50px;
-    padding: 10px 20px;
+    border-radius: 12px;
+    padding: 8px 18px;
     font-weight: 500;
     font-size: 13px;
     font-family: 'Segoe UI', sans-serif;
+    min-height: 32px;
 }
 
 QPushButton:hover {
@@ -189,13 +222,14 @@ QPushButton:disabled {
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* ----- PRIMARY BUTTON ----- */
+/* ----- PRIMARY (фиолетовый градиент) ----- */
 QPushButton[primary="true"] {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #9b59b6,
         stop:1 #7c4dff);
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: none;
+    border-radius: 12px;
     font-weight: 600;
 }
 
@@ -203,16 +237,22 @@ QPushButton[primary="true"]:hover {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #af6bca,
         stop:1 #8c5dff);
-    border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-/* ----- SUCCESS BUTTON ----- */
+QPushButton[primary="true"]:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #8e44ad,
+        stop:1 #6c3ddf);
+}
+
+/* ----- SUCCESS (зелёный) ----- */
 QPushButton[success="true"] {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #00e676,
         stop:1 #00bcd4);
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: none;
+    border-radius: 12px;
 }
 
 QPushButton[success="true"]:hover {
@@ -221,13 +261,14 @@ QPushButton[success="true"]:hover {
         stop:1 #00cce6);
 }
 
-/* ----- DANGER BUTTON ----- */
+/* ----- DANGER (красный) ----- */
 QPushButton[danger="true"] {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #ff1744,
         stop:1 #ff6d00);
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: none;
+    border-radius: 12px;
 }
 
 QPushButton[danger="true"]:hover {
@@ -236,29 +277,112 @@ QPushButton[danger="true"]:hover {
         stop:1 #ff8800);
 }
 
-/* ----- SELECTABLE BUTTON ----- */
+/* ----- SELECTABLE (переключаемая, как Select) ----- */
 QPushButton[selectable="true"] {
     background-color: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+}
+
+QPushButton[selectable="true"]:hover {
+    background-color: rgba(255, 255, 255, 0.08);
 }
 
 QPushButton[selectable="true"]:checked {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #9b59b6,
         stop:1 #7c4dff);
-    border: 1px solid rgba(255, 255, 255, 0.25);
     color: white;
+    border: none;
+}
+
+/* ----- VM ACTION (для VM таблицы) ----- */
+QPushButton[vm_action="true"] {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: #e8e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+QPushButton[vm_action="true"]:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+QPushButton[vm_action="true"]:pressed {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ----- VM ICON BUTTON (круглые иконки) ----- */
+QPushButton[vm_icon_btn="true"] {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 6px;
+    font-size: 12px;
+    font-weight: 300;
+    min-width: 32px;
+    max-width: 32px;
+}
+
+QPushButton[vm_icon_btn="true"]:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* ----- BOTTOM BUTTONS (Select, Build, Run) ----- */
+QPushButton[bottom_btn="true"] {
+    border-radius: 12px;
+    padding: 8px 16px;
+    min-width: 72px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+QPushButton[bottom_btn="true"][selectable="true"] {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+QPushButton[bottom_btn="true"][selectable="true"]:checked {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #9b59b6,
+        stop:1 #7c4dff);
+    color: white;
+    border: none;
+}
+
+QPushButton[bottom_btn="true"][success="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #00e676,
+        stop:1 #00bcd4);
+    color: white;
+    border: none;
+}
+
+QPushButton[bottom_btn="true"][primary="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #9b59b6,
+        stop:1 #7c4dff);
+    color: white;
+    border: none;
 }
 
 /* ============================================================
-   QLINEEDIT, QTEXTEDIT, QSPINBOX, QCOMBOBOX
+   ПОЛЯ ВВОДА
    ============================================================ */
 QLineEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit, QTimeEdit, QDateTimeEdit {
     background-color: rgba(255, 255, 255, 0.04);
     color: #e8e8f0;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 10px 16px;
+    border-radius: 12px;
+    padding: 8px 14px;
     font-size: 13px;
     font-family: 'Segoe UI', sans-serif;
     selection-background-color: #7c4dff;
@@ -277,92 +401,141 @@ QLineEdit::placeholder {
     color: #6a6a82;
 }
 
+QLineEdit[vm_search="true"] {
+    border-radius: 12px;
+    padding: 8px 14px;
+    font-size: 12px;
+}
+
+QComboBox[vm_filter="true"] {
+    border-radius: 12px;
+    padding: 8px 14px;
+    font-size: 12px;
+    min-width: 110px;
+}
+
 /* ============================================================
-   QTABLEWIDGET - РЎРўРР›Р¬ "РљРђР РўРђ"
+   QTABLEWIDGET - VM TABLE
    ============================================================ */
-QTableWidget {
-    background-color: rgba(20, 20, 30, 0.8);
-    color: #e8e8f0;
-    gridline-color: rgba(255, 255, 255, 0.04);
+QWidget#VmTable {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(10, 10, 26, 0.95),
+        stop:0.4 rgba(20, 20, 46, 0.92),
+        stop:1 rgba(26, 10, 46, 0.95));
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+QTableWidget[vm_table="true"] {
+    background-color: rgba(10, 10, 26, 0.55);
+    color: rgba(255, 255, 255, 0.85);
+    gridline-color: transparent;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 16px;
-    font-family: 'Segoe UI', sans-serif;
-    font-size: 13px;
-    selection-background-color: #7c4dff;
+    font-size: 12px;
+    outline: none;
+    selection-background-color: transparent;
+    alternate-background-color: rgba(255, 255, 255, 0.02);
 }
 
-QTableWidget::item {
-    padding: 10px 16px;
+QTableWidget[vm_table="true"]::item {
+    padding: 10px 14px;
     border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    background-color: transparent;
 }
 
-QTableWidget::item:selected {
+QTableWidget[vm_table="true"]::item:alternate {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+QTableWidget[vm_table="true"]::item:selected {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #9b59b6,
-        stop:1 #7c4dff);
-    color: white;
+        stop:0 rgba(155, 89, 182, 0.22),
+        stop:1 rgba(124, 77, 255, 0.22));
+    color: #ffffff;
+    border-left: 3px solid #9b59b6;
 }
 
-QTableWidget::item:hover {
-    background-color: rgba(255, 255, 255, 0.04);
+QTableWidget[vm_table="true"]::item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
 }
 
-QHeaderView::section {
-    background-color: rgba(26, 26, 46, 0.9);
-    color: #a0a0b8;
-    padding: 12px 16px;
+QTableWidget[vm_table="true"] QHeaderView::section {
+    background-color: rgba(255, 255, 255, 0.03);
+    color: rgba(255, 255, 255, 0.55);
+    padding: 10px 14px;
     border: none;
     border-bottom: 2px solid qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 rgba(155, 89, 182, 0.3),
-        stop:0.5 rgba(124, 77, 255, 0.3),
-        stop:1 rgba(0, 212, 255, 0.3));
+        stop:0 rgba(155, 89, 182, 0.25),
+        stop:1 rgba(124, 77, 255, 0.25));
     font-weight: 600;
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
 }
 
-QHeaderView::section:hover {
-    background-color: rgba(42, 42, 74, 0.9);
+QTableWidget[vm_table="true"] QHeaderView::section:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+QComboBox[vm_type="true"] {
+    background-color: rgba(255, 255, 255, 0.04);
     color: #e8e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    min-height: 24px;
 }
 
-QHeaderView::section:vertical {
-    background-color: rgba(26, 26, 46, 0.9);
-    padding: 8px 4px;
+QComboBox[vm_type="true"]::drop-down {
     border: none;
-    border-right: 2px solid qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 rgba(155, 89, 182, 0.3),
-        stop:1 rgba(124, 77, 255, 0.3));
+    width: 18px;
+}
+
+QComboBox[vm_type="true"][type_value="Static"] {
+    color: #4fc3f7;
+    border-left: 3px solid #4fc3f7;
+}
+
+QComboBox[vm_type="true"][type_value="Dynamic"] {
+    color: #69f0ae;
+    border-left: 3px solid #69f0ae;
+}
+
+QComboBox[vm_type="true"][type_value="Network"] {
+    color: #ffab40;
+    border-left: 3px solid #ffab40;
+}
+
+QComboBox[vm_type="true"] QAbstractItemView {
+    background-color: #14141e;
+    color: #e8e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    selection-background-color: rgba(124, 77, 255, 0.35);
+    padding: 4px;
+}
+
+QComboBox[vm_type="true"] QAbstractItemView::item {
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+QComboBox[vm_type="true"] QAbstractItemView::item:selected {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(155, 89, 182, 0.35),
+        stop:1 rgba(124, 77, 255, 0.35));
+    color: white;
 }
 
 /* ============================================================
    QLISTWIDGET
    ============================================================ */
-QListWidget {
-    background-color: rgba(255, 255, 255, 0.03);
-    color: #e8e8f0;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 16px;
-    padding: 4px;
-}
-
-QListWidget::item {
-    padding: 8px 16px;
-    border-radius: 8px;
-}
-
-QListWidget::item:selected {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #9b59b6,
-        stop:1 #7c4dff);
-    color: white;
-}
-
-QListWidget::item:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
 QListWidget[project_list="true"] {
     background-color: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
@@ -390,35 +563,12 @@ QListWidget[project_list="true"]::item:selected {
 }
 
 /* ============================================================
-   QTREEWIDGET
-   ============================================================ */
-QTreeWidget {
-    background-color: rgba(255, 255, 255, 0.03);
-    color: #e8e8f0;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 16px;
-    padding: 4px;
-}
-
-QTreeWidget::item {
-    padding: 6px 12px;
-    border-radius: 8px;
-}
-
-QTreeWidget::item:selected {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #9b59b6,
-        stop:1 #7c4dff);
-    color: white;
-}
-
-/* ============================================================
-   QGROUPBOX - РЎРўР•РљР›РЇРќРќР«Р• РљРђР РўРћР§РљР
+   QGROUPBOX
    ============================================================ */
 QGroupBox {
     background-color: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 24px;
+    border-radius: 16px;
     margin-top: 12px;
     padding: 16px;
     font-weight: 600;
@@ -434,13 +584,6 @@ QGroupBox::title {
     font-size: 12px;
     letter-spacing: 0.3px;
     text-transform: uppercase;
-}
-
-QGroupBox:hover {
-    border: 1px solid qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 rgba(155, 89, 182, 0.25),
-        stop:0.5 rgba(124, 77, 255, 0.25),
-        stop:1 rgba(0, 212, 255, 0.25));
 }
 
 QGroupBox[project_details="true"] {
@@ -508,7 +651,7 @@ QTabBar::tab {
     margin-right: 2px;
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: none;
-    border-radius: 16px 16px 0 0;
+    border-radius: 12px 12px 0 0;
     font-weight: 500;
     font-family: 'Segoe UI', sans-serif;
 }
@@ -534,7 +677,7 @@ QTabBar::tab:disabled {
 }
 
 /* ============================================================
-   QSPLITTER - РРЎРџР РђР’Р›Р•РќРћ Р”Р›РЇ Р РђР‘РћРўР« РЎ Р’Р«РЎРћРўРћР™
+   QSPLITTER
    ============================================================ */
 QSplitter::handle {
     background-color: rgba(255, 255, 255, 0.08);
@@ -565,7 +708,24 @@ QSplitter[browser_splitter="true"]::handle:hover {
     background-color: rgba(124, 77, 255, 0.4);
 }
 
-/* ============================================================ 
+/* ============================================================
+   QSCROLLAREA - ПОЛНАЯ ПРОЗРАЧНОСТЬ
+   ============================================================ */
+QScrollArea {
+    background: transparent;
+    border: none;
+    outline: none;
+}
+
+QScrollArea > QWidget {
+    background: transparent;
+}
+
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+
+/* ============================================================
    QSCROLLBAR
    ============================================================ */
 QScrollBar:vertical {
@@ -610,7 +770,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     width: 0px;
 }
 
-/* ============================================================ 
+/* ============================================================
    QCHECKBOX
    ============================================================ */
 QCheckBox {
@@ -644,7 +804,7 @@ QCheckBox:checked {
     color: #ffffff;
 }
 
-/* ============================================================ 
+/* ============================================================
    QCOMBOBOX
    ============================================================ */
 QComboBox::drop-down {
@@ -663,7 +823,7 @@ QComboBox QAbstractItemView {
     background-color: #14141e;
     color: #e8e8f0;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
+    border-radius: 12px;
     selection-background-color: #7c4dff;
     padding: 4px;
 }
@@ -680,7 +840,7 @@ QComboBox QAbstractItemView::item:selected {
     color: white;
 }
 
-/* ============================================================ 
+/* ============================================================
    QSPINBOX
    ============================================================ */
 QSpinBox::up-button, QDoubleSpinBox::up-button {
@@ -707,7 +867,7 @@ QSpinBox::down-arrow {
     height: 5px;
 }
 
-/* ============================================================ 
+/* ============================================================
    QMENUBAR
    ============================================================ */
 QMenuBar {
@@ -736,14 +896,14 @@ QMenuBar::item:pressed {
     background-color: #7c4dff;
 }
 
-/* ============================================================ 
+/* ============================================================
    QMENU
    ============================================================ */
 QMenu {
     background-color: #14141e;
     color: #e8e8f0;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 16px;
+    border-radius: 12px;
     padding: 8px;
 }
 
@@ -771,7 +931,38 @@ QMenu::separator {
     margin: 4px 12px;
 }
 
-/* ============================================================ 
+QMenu[vm_context="true"] {
+    background-color: rgba(20, 20, 40, 0.97);
+    border-radius: 14px;
+    padding: 6px;
+    font-size: 12px;
+}
+
+QMenu[vm_context="true"]::item {
+    padding: 8px 24px;
+    border-radius: 8px;
+    margin: 2px 4px;
+}
+
+QMenu[vm_context="true"]::item:selected {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(155, 89, 182, 0.25),
+        stop:1 rgba(124, 77, 255, 0.25));
+    color: #ffffff;
+}
+
+QMenu[vm_context="true"]::item:disabled {
+    color: rgba(255, 255, 255, 0.45);
+    font-weight: 600;
+}
+
+QMenu[vm_context="true"]::separator {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.05);
+    margin: 4px 8px;
+}
+
+/* ============================================================
    QSTATUSBAR
    ============================================================ */
 QStatusBar {
@@ -786,7 +977,7 @@ QStatusBar::item {
     border: none;
 }
 
-/* ============================================================ 
+/* ============================================================
    QTOOLTIP
    ============================================================ */
 QToolTip {
@@ -799,8 +990,8 @@ QToolTip {
     font-family: 'Segoe UI', sans-serif;
 }
 
-/* ============================================================ 
-   РљРћРќРЎРћР›Р¬ - Р‘Р•Р— РћР“Р РђРќРР§Р•РќРР™ Р’Р«РЎРћРўР«
+/* ============================================================
+   КОНСОЛЬ
    ============================================================ */
 QTextEdit[console="true"] {
     background-color: rgba(20, 20, 30, 0.9);
@@ -812,15 +1003,6 @@ QTextEdit[console="true"] {
     padding: 4px 10px;
 }
 
-/* ============================================================ 
-   РќРР–РќРЇРЇ РџРђРќР•Р›Р¬ - Р‘Р•Р— РћР“Р РђРќРР§Р•РќРР™ Р’Р«РЎРћРўР«
-   ============================================================ */
-QFrame[bottom_frame="true"] {
-    background-color: rgba(20, 20, 30, 0.85);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-/* ----- РџР Р•Р’Р¬Р® РџР•Р Р•РњР•РќРќР«РҐ ----- */
 QTextEdit[preview="true"] {
     background-color: rgba(0, 0, 0, 0.2);
     color: rgba(255, 255, 255, 0.6);
@@ -831,21 +1013,25 @@ QTextEdit[preview="true"] {
     padding: 8px 12px;
 }
 
-/* ============================================================ 
-   DEVTOOLS РљРћРќРўР•Р™РќР•Р 
+/* ============================================================
+   НИЖНЯЯ ПАНЕЛЬ
+   ============================================================ */
+QFrame[bottom_frame="true"] {
+    background-color: rgba(20, 20, 30, 0.85);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ============================================================
+   DEVTOOLS КОНТЕЙНЕР
    ============================================================ */
 QWidget[devtools_container="true"] {
     background-color: rgba(20, 20, 30, 0.9);
     border-left: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* ============================================================ 
-   РЈРўРР›РРўР«
+/* ============================================================
+   УТИЛИТЫ
    ============================================================ */
 QWidget[hidden="true"] {
     visibility: hidden;
-}
-
-QLabel[center="true"] {
-    qproperty-alignment: AlignCenter;
 }

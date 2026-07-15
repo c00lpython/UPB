@@ -1,3 +1,5 @@
+# ui/SE/ui/canvas_widget.py - ПОЛНАЯ ВЕРСИЯ
+
 import math
 import json
 from typing import Dict, List, Optional, Any
@@ -11,7 +13,6 @@ class CollapseButton(QGraphicsEllipseItem):
     """Кнопка сворачивания/разворачивания блока (+/-) внутри блока"""
     
     def __init__(self, parent_node):
-        print(f"🔘 [CollapseButton] __init__ START")
         super().__init__(-8, -8, 16, 16, parent_node)
         self.parent_node = parent_node
         self.collapsed = False
@@ -28,7 +29,6 @@ class CollapseButton(QGraphicsEllipseItem):
         
         self.setAcceptHoverEvents(True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
-        print(f"🔘 [CollapseButton] __init__ END")
     
     def _center_text(self):
         text_rect = self.text.boundingRect()
@@ -41,7 +41,6 @@ class CollapseButton(QGraphicsEllipseItem):
     
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            print(f"🔘 [CollapseButton] clicked on {self.parent_node.block.name}")
             self.parent_node.toggle_collapse()
             event.accept()
         else:
@@ -58,28 +57,251 @@ class CollapseButton(QGraphicsEllipseItem):
         super().hoverLeaveEvent(event)
 
 
+class LightningEffectItem(QGraphicsItem):
+    """Анимация молнии для появления блока"""
+    
+    def __init__(self, pos, color="#ff9900", parent=None):
+        super().__init__(parent)
+        self.setPos(pos)
+        self._opacity = 0.0
+        self._progress = 0.0
+        self._finished = False
+        self._color = QColor(color)
+        
+        self.anim = QVariantAnimation()
+        self.anim.setDuration(600)
+        self.anim.setStartValue(0.0)
+        self.anim.setEndValue(1.0)
+        self.anim.valueChanged.connect(self.update_animation)
+        self.anim.finished.connect(self.finish)
+        self.anim.start()
+        
+        self.setZValue(100)
+    
+    def update_animation(self, value):
+        self._progress = value
+        self._opacity = 1.0 if value < 0.25 else max(0, 1.0 - (value - 0.25) / 0.35)
+        self.update()
+    
+    def finish(self):
+        self._finished = True
+        self.hide()
+        QTimer.singleShot(100, self.deleteLater)
+    
+    def boundingRect(self):
+        return QRectF(-150, -150, 300, 300)
+    
+    def paint(self, painter, option, widget):
+        if self._finished or self._opacity < 0.01:
+            return
+        
+        painter.setOpacity(self._opacity)
+        
+        center = QPointF(0, 0)
+        radius = 120 * (0.3 + 0.7 * self._progress)
+        
+        # Внешнее свечение
+        gradient = QRadialGradient(center, radius * 2)
+        gradient.setColorAt(0, QColor(255, 255, 255, 200))
+        gradient.setColorAt(0.1, QColor(200, 230, 255, 150))
+        gradient.setColorAt(0.3, QColor(self._color).lighter(150))
+        gradient.setColorAt(0.6, QColor(self._color))
+        gradient.setColorAt(1, QColor(self._color).darker(200))
+        
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(center, radius * 2, radius * 2)
+        
+        # Яркое ядро
+        core_radius = 50 * (0.3 + 0.7 * self._progress)
+        core_gradient = QRadialGradient(center, core_radius)
+        core_gradient.setColorAt(0, QColor(255, 255, 255, 255))
+        core_gradient.setColorAt(0.5, QColor(255, 255, 200, 200))
+        core_gradient.setColorAt(1, QColor(255, 200, 100, 100))
+        
+        painter.setBrush(QBrush(core_gradient))
+        painter.drawEllipse(center, core_radius, core_radius)
+        
+        # Лучи молнии
+        painter.setPen(QPen(QColor(255, 255, 255, int(150 * self._opacity)), 2))
+        for i in range(12):
+            angle = i * math.pi / 6 + self._progress * 3
+            length = 80 + 50 * math.sin(self._progress * 25 + i * 1.5)
+            x1 = center.x() + 40 * math.cos(angle)
+            y1 = center.y() + 40 * math.sin(angle)
+            x2 = center.x() + (40 + length) * math.cos(angle + 0.3 * math.sin(self._progress * 12 + i))
+            y2 = center.y() + (40 + length) * math.sin(angle + 0.3 * math.sin(self._progress * 12 + i))
+            
+            points = [
+                QPointF(x1, y1),
+                QPointF((x1 + x2) / 2 + 25 * math.sin(angle + 1.5), (y1 + y2) / 2 + 25 * math.cos(angle + 1.5)),
+                QPointF((x1 + x2) / 2 + 35 * math.sin(angle + 2.5), (y1 + y2) / 2 + 35 * math.cos(angle + 2.5)),
+                QPointF(x2, y2)
+            ]
+            painter.drawPolyline(QPolygonF(points))
+        
+        # Кольца расширения
+        for i in range(4):
+            ring_radius = 50 + 80 * self._progress + i * 20
+            ring_alpha = int(100 * (1.0 - self._progress / 0.6) * self._opacity)
+            if ring_alpha > 0:
+                painter.setPen(QPen(QColor(200, 220, 255, ring_alpha), 2))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(center, ring_radius, ring_radius)
+        
+        painter.setOpacity(1.0)
+
+
+class PortItem(QGraphicsEllipseItem):
+    """Порт для соединений"""
+    
+    def __init__(self, port_type, parent_node, size=8):
+        super().__init__(-size/2, -size/2, size, size, parent_node)
+        self.port_type = port_type
+        self.parent_node = parent_node
+        self.setAcceptHoverEvents(True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        
+        if port_type == "input":
+            self.default_brush = QBrush(QColor("#e74c3c"))
+            self.highlight_brush = QBrush(QColor("#f1c40f"))
+        elif port_type == "output":
+            self.default_brush = QBrush(QColor("#2ecc71"))
+            self.highlight_brush = QBrush(QColor("#f39c12"))
+        elif port_type == "true":
+            self.default_brush = QBrush(QColor("#2ecc71"))
+            self.highlight_brush = QBrush(QColor("#f39c12"))
+        elif port_type == "false":
+            self.default_brush = QBrush(QColor("#e74c3c"))
+            self.highlight_brush = QBrush(QColor("#f39c12"))
+        else:
+            self.default_brush = QBrush(QColor("#3498db"))
+            self.highlight_brush = QBrush(QColor("#f1c40f"))
+        
+        self.setBrush(self.default_brush)
+        self.setZValue(10)
+        self.setData(0, port_type)
+
+    def set_highlighted(self, highlighted):
+        self.setBrush(self.highlight_brush if highlighted else self.default_brush)
+    
+    def hoverEnterEvent(self, event):
+        self.setBrush(self.highlight_brush)
+        self.setScale(1.3)
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self.setBrush(self.default_brush)
+        self.setScale(1.0)
+        super().hoverLeaveEvent(event)
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.parent_node.start_connection_drag(self.port_type)
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+
+class GraphEdge(QGraphicsPathItem):
+    """Графическое представление соединения"""
+    
+    def __init__(self, connection, canvas, edge_type="data"):
+        super().__init__()
+        self.connection = connection
+        self.canvas = canvas
+        self.source = None
+        self.destination = None
+        self.source_port = connection.from_port
+        self.dest_port = connection.to_port
+        self.edge_type = edge_type
+        self.original_edge = None
+        self.source_child = None
+        
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setZValue(-1)
+        self.pen_width = 2
+        self.setAcceptHoverEvents(True)
+        
+        if connection.from_port == "true":
+            self.data_color = QColor("#2ecc71")
+        elif connection.from_port == "false":
+            self.data_color = QColor("#e74c3c")
+        else:
+            self.data_color = QColor("#3498db")
+        
+        self.inheritance_color = QColor("#9b59b6")
+        self.proxy_color = QColor("#f39c12")
+    
+    def set_source(self, node):
+        self.source = node
+        self.update_position()
+    
+    def set_destination(self, node):
+        self.destination = node
+        self.update_position()
+    
+    def update_position(self):
+        if self.source and self.destination:
+            self.prepareGeometryChange()
+            source_point = self.source.get_port_position(self.source_port)
+            dest_point = self.destination.get_port_position(self.dest_port)
+            self.source_pos = source_point
+            self.dest_pos = dest_point
+            self.setPos(QPointF(0, 0))
+            self.update_path()
+
+    def update_path(self):
+        if not hasattr(self, 'source_pos') or not hasattr(self, 'dest_pos'):
+            return
+        source_port_pos = self.source_pos
+        dest_port_pos = self.dest_pos
+        target_pos = QPointF(dest_port_pos.x() - 15, dest_port_pos.y())
+        path = QPainterPath()
+        path.moveTo(source_port_pos)
+        dx = target_pos.x() - source_port_pos.x()
+        ctrl1 = QPointF(source_port_pos.x() + dx * 0.25, source_port_pos.y())
+        ctrl2 = QPointF(target_pos.x() - dx * 0.25, target_pos.y())
+        path.cubicTo(ctrl1, ctrl2, target_pos)
+        self.setPath(path)
+        self.arrow_center = QPointF(dest_port_pos.x() - 15, dest_port_pos.y())
+    
+    def paint(self, painter, option, widget=None):
+        if not self.source or not self.destination:
+            return
+        
+        color = self.data_color
+        pen = QPen(color)
+        pen.setWidth(self.pen_width)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawPath(self.path())
+        
+        # Стрелка
+        arrow_center = self.arrow_center
+        arrow_size = 10
+        arrow_width = 6
+        painter.setBrush(QBrush(color))
+        painter.setPen(QPen(color, 1))
+        points = [
+            arrow_center + QPointF(arrow_size/2, 0),
+            arrow_center + QPointF(-arrow_size/2, -arrow_width/2),
+            arrow_center + QPointF(-arrow_size/2, arrow_width/2)
+        ]
+        painter.drawPolygon(QPolygonF(points))
+
+
 class GraphNode(QGraphicsRectItem):
-    """Графическое представление блока на канвасе с портами слева/справа"""
+    """Графическое представление блока на канвасе"""
     
     def __init__(self, block, canvas):
-        print(f"🎨 [GraphNode] __init__ START: id={block.id}, name={block.name}")
-        
-        self.original_width = block.size["width"]
-        self.original_height = block.size["height"]
-        self.original_rect = QRectF(0, 0, self.original_width, self.original_height)
-        
-        super().__init__(self.original_rect)
+        super().__init__(QRectF(0, 0, block.size["width"], block.size["height"]))
         self.block = block
         self.canvas = canvas
         self.child_nodes = []
         self.parent_node = None
         self.collapsed = False
-        
-        # Для подписей портов
-        self.input_label = None
-        self.output_label = None
-        self.true_label = None
-        self.false_label = None
         
         self.ready_to_nest = False
         self.is_potential_parent = False
@@ -111,17 +333,18 @@ class GraphNode(QGraphicsRectItem):
         self.setAcceptHoverEvents(True)
         self.setAcceptDrops(True)
         
-        self.default_brush = QBrush(QColor(block.color))
-        self.drop_target_brush = QBrush(QColor(block.color).lighter(130))
-        self.ready_brush = QBrush(QColor(block.color).lighter(150))
+        # Стиль карточки
+        base_color = QColor(block.color)
+        self.default_brush = QBrush(base_color)
+        self.hover_brush = QBrush(base_color.lighter(120))
+        self.drop_brush = QBrush(base_color.lighter(140))
         self.setBrush(self.default_brush)
         
-        pen = QPen(QColor("#2c3e50"))
-        pen.setWidth(2)
+        pen = QPen(QColor("#2c3e50"), 2)
         self.setPen(pen)
         self.setZValue(1)
-        
         self._radius = 8
+        
         self.external_connections = []
         self.proxy_edges = []
         
@@ -138,51 +361,22 @@ class GraphNode(QGraphicsRectItem):
         
         self.ports = {}
         self.create_ports()
-        
         self.edges = []
         
         self.setPos(block.position["x"], block.position["y"])
-        print(f"✅ [GraphNode] __init__ END: pos=({block.position['x']}, {block.position['y']})")
     
     def _create_collapse_button(self):
         self.collapse_button = CollapseButton(self)
-        self.collapse_button.setPos(self.rect().width() - 10, 5)
-    
-    def analyze_external_connections(self):
-        external_conns = []
-        for child in self.child_nodes:
-            for edge in child.edges:
-                other_node = edge.source if edge.destination == child else edge.destination
-                if not self._is_descendant(other_node):
-                    external_conns.append({
-                        'child': child,
-                        'edge': edge,
-                        'other_node': other_node,
-                        'direction': 'out' if edge.source == child else 'in'
-                    })
-        return external_conns
-
-    def _is_descendant(self, node):
-        current = node
-        while current:
-            if current == self:
-                return True
-            current = current.parent_node
-        return False
+        self.collapse_button.setPos(self.rect().width() - 18, 8)
     
     def _center_text(self):
         text_rect = self.text_item.boundingRect()
-        if self.collapse_button:
-            self.text_item.setPos(10, (self.rect().height() - text_rect.height()) / 2)
-        else:
-            self.text_item.setPos((self.rect().width() - text_rect.width()) / 2, (self.rect().height() - text_rect.height()) / 2)
+        self.text_item.setPos(10, (self.rect().height() - text_rect.height()) / 2)
     
     def create_ports(self):
-        """Создаёт порты: input слева, output(true) и output(false) справа для IfBlock"""
         rect = self.rect()
         port_size = 8
         
-        # INPUT порт (всегда один, слева)
         input_port = PortItem("input", self, port_size)
         input_port.setBrush(QBrush(QColor("#e74c3c")))
         input_port.setPen(QPen(QColor("#c0392b"), 1))
@@ -191,18 +385,7 @@ class GraphNode(QGraphicsRectItem):
         input_port.setData(0, "input")
         self.ports["input"] = input_port
         
-        # Добавляем подпись под INPUT портом (отдельно, не в self.ports)
-        input_label = QGraphicsTextItem("in", self)
-        input_label.setDefaultTextColor(QColor("#888888"))
-        font = QFont("Arial", 7)
-        input_label.setFont(font)
-        input_label.setPos(2, rect.height() / 2 + 5)
-        input_label.setVisible(not self.collapsed)
-        self.input_label = input_label  # Храним отдельно
-        
-        # Если это IfBlock - создаём два выходных порта
         if self.block.node_type == "if":
-            # TRUE порт (зелёный, сверху)
             true_port = PortItem("true", self, port_size)
             true_port.setBrush(QBrush(QColor("#2ecc71")))
             true_port.setPen(QPen(QColor("#27ae60"), 1))
@@ -211,35 +394,14 @@ class GraphNode(QGraphicsRectItem):
             true_port.setData(0, "true")
             self.ports["true"] = true_port
             
-            # Подпись под TRUE портом
-            true_label = QGraphicsTextItem("true", self)
-            true_label.setDefaultTextColor(QColor("#2ecc71"))
-            font = QFont("Arial", 7)
-            true_label.setFont(font)
-            true_label.setPos(rect.width() - 12, rect.height() * 0.25 + 5)
-            true_label.setVisible(not self.collapsed)
-            self.true_label = true_label  # Храним отдельно
-            
-            # FALSE порт (зелёный, снизу)
             false_port = PortItem("false", self, port_size)
-            false_port.setBrush(QBrush(QColor("#2ecc71")))
-            false_port.setPen(QPen(QColor("#27ae60"), 1))
+            false_port.setBrush(QBrush(QColor("#e74c3c")))
+            false_port.setPen(QPen(QColor("#c0392b"), 1))
             false_port.setPos(rect.width(), rect.height() * 0.75)
             false_port.setZValue(2)
             false_port.setData(0, "false")
             self.ports["false"] = false_port
-            
-            # Подпись под FALSE портом
-            false_label = QGraphicsTextItem("false", self)
-            false_label.setDefaultTextColor(QColor("#2ecc71"))
-            font = QFont("Arial", 7)
-            false_label.setFont(font)
-            false_label.setPos(rect.width() - 18, rect.height() * 0.75 + 5)
-            false_label.setVisible(not self.collapsed)
-            self.false_label = false_label  # Храним отдельно
-        
         else:
-            # Обычный блок - один output порт
             output_port = PortItem("output", self, port_size)
             output_port.setBrush(QBrush(QColor("#2ecc71")))
             output_port.setPen(QPen(QColor("#27ae60"), 1))
@@ -247,17 +409,6 @@ class GraphNode(QGraphicsRectItem):
             output_port.setZValue(2)
             output_port.setData(0, "output")
             self.ports["output"] = output_port
-            
-            # Подпись под OUTPUT портом
-            output_label = QGraphicsTextItem("out", self)
-            output_label.setDefaultTextColor(QColor("#888888"))
-            font = QFont("Arial", 7)
-            output_label.setFont(font)
-            output_label.setPos(rect.width() - 14, rect.height() / 2 + 5)
-            output_label.setVisible(not self.collapsed)
-            self.output_label = output_label  # Храним отдельно
-        
-        print(f"🔌 [GraphNode] Ports created for {self.block.name}")
 
     def get_port_position(self, port_name):
         if port_name == "center":
@@ -278,12 +429,10 @@ class GraphNode(QGraphicsRectItem):
             child.move_children(delta_x, delta_y)
     
     def start_connection_drag(self, port_name):
-        print(f"🚀 [GraphNode] start_connection_drag: {port_name} from {self.block.name}")
         self.is_dragging_connection = True
         self.drag_start_port = port_name
         
-        # Исправлено: проверяем тип перед вызовом set_highlighted
-        if port_name in self.ports and isinstance(self.ports[port_name], PortItem):
+        if port_name in self.ports:
             self.ports[port_name].set_highlighted(True)
         
         self.temp_connection_line = QGraphicsLineItem()
@@ -295,8 +444,7 @@ class GraphNode(QGraphicsRectItem):
         
         start_pos = self.get_port_position(port_name)
         self.temp_connection_line.setLine(start_pos.x(), start_pos.y(), start_pos.x(), start_pos.y())
-        self._update_status(f"Drag from {port_name.upper()} port to connect...", is_warning=True)
-
+    
     def update_temp_connection(self, pos):
         if self.temp_connection_line and self.drag_start_port:
             start_pos = self.get_port_position(self.drag_start_port)
@@ -306,21 +454,6 @@ class GraphNode(QGraphicsRectItem):
         if not self.drag_start_port:
             return
         
-        # Логика для IfBlock: сохраняем connection в соответствующий branch
-        if self.block.node_type == "if" and self.drag_start_port in ["true", "false"]:
-            # Сохраняем связь в params для сериализации
-            if self.drag_start_port == "true":
-                self.block.params["true_next"] = str(target_node.block.id)
-                if hasattr(self.block, 'true_branch_id'):
-                    self.block.true_branch_id = target_node.block.id
-            else:
-                self.block.params["false_next"] = str(target_node.block.id)
-                if hasattr(self.block, 'false_branch_id'):
-                    self.block.false_branch_id = target_node.block.id
-            
-            print(f"🔗 [IfBlock] Branch {self.drag_start_port}: {self.block.name} → {target_node.block.name}")
-        
-        # Обычная логика соединения
         if self.drag_start_port == "output" and target_port == "input":
             from_node, to_node = self, target_node
             from_port, to_port = "output", "input"
@@ -338,7 +471,6 @@ class GraphNode(QGraphicsRectItem):
             self.cancel_connection_drag()
             return
         
-        # Проверка на дублирование
         for edge in from_node.edges:
             if edge.destination == to_node:
                 self.cancel_connection_drag()
@@ -356,8 +488,6 @@ class GraphNode(QGraphicsRectItem):
             self.canvas.parent_window.project.add_connection(connection)
         
         self.canvas.add_connection(connection, "data")
-        print(f"🔗 [GraphNode] Connection created: {from_node.block.name} → {to_node.block.name}")
-        self._update_status(f"✓ Connected {from_node.block.name} → {to_node.block.name}")
         self.cancel_connection_drag()
     
     def cancel_connection_drag(self):
@@ -367,117 +497,8 @@ class GraphNode(QGraphicsRectItem):
             self.scene().removeItem(self.temp_connection_line)
             self.temp_connection_line = None
         
-        # Исправлено: проверяем тип объекта перед вызовом set_highlighted
         for port in self.ports.values():
-            if isinstance(port, PortItem):  # Только для портов, не для подписей
-                port.set_highlighted(False)
-    
-    def _animate_child_appearance(self, child_node):
-        child_node.setOpacity(0.0)
-        anim = QVariantAnimation()
-        anim.setDuration(300)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.valueChanged.connect(lambda v, node=child_node: node.setOpacity(v))
-        anim_id = id(anim)
-        self._animations[anim_id] = anim
-        anim.finished.connect(lambda: self._safe_remove_animation(anim_id))
-        anim.start()
-    
-    def _animate_collapse(self, child):
-        for edge in child.edges[:]:
-            other_node = edge.source if edge.destination == child else edge.destination
-            if not self._is_descendant(other_node):
-                continue
-            else:
-                edge.hide()
-        child.show()
-        anim = QVariantAnimation()
-        anim.setDuration(200)
-        anim.setStartValue(1.0)
-        anim.setEndValue(0.0)
-        anim.valueChanged.connect(lambda v, node=child: node.setOpacity(v))
-        anim.finished.connect(child.hide)
-        anim_id = id(anim)
-        self._animations[anim_id] = anim
-        anim.finished.connect(lambda: self._safe_remove_animation(anim_id))
-        anim.start()
-
-    def _animate_expand(self, child):
-        child.show()
-        child.setOpacity(0.0)
-        for edge in child.edges:
-            edge.show()
-        anim = QVariantAnimation()
-        anim.setDuration(200)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.valueChanged.connect(lambda v, node=child: node.setOpacity(v))
-        anim_id = id(anim)
-        self._animations[anim_id] = anim
-        anim.finished.connect(lambda: self._safe_remove_animation(anim_id))
-        anim.start()
-    
-    def _start_nest_animation(self, dragged_node):
-        self.nest_animation_active = True
-        if hasattr(self, 'hover_animation_id') and self.hover_animation_id:
-            self._safe_remove_animation(self.hover_animation_id)
-            self.hover_animation_id = None
-        anim = QVariantAnimation()
-        anim.setDuration(1000)
-        anim.setStartValue(1.0)
-        anim.setKeyValueAt(0.5, 1.1)
-        anim.setEndValue(1.0)
-        anim.setLoopCount(-1)
-        anim.valueChanged.connect(self._update_hover_scale)
-        self.hover_animation_id = id(anim)
-        self._animations[self.hover_animation_id] = anim
-        anim.start()
-        self.setBrush(self.drop_target_brush)
-        self.setToolTip(f"Drop to nest '{dragged_node.block.name}' inside")
-        dragged_node.potential_parent = self
-        dragged_node.ready_to_nest = True
-    
-    def _stop_nest_animation(self):
-        self.nest_animation_active = False
-        if hasattr(self, 'hover_animation_id') and self.hover_animation_id:
-            self._safe_remove_animation(self.hover_animation_id)
-            self.hover_animation_id = None
-        self.setScale(1.0)
-    
-    def _update_hover_scale(self, value):
-        self.setScale(value)
-    
-    def _safe_remove_animation(self, anim_id):
-        if anim_id is None:
-            return
-        try:
-            if anim_id in self._animations:
-                try:
-                    anim = self._animations[anim_id]
-                    if anim.state() != QVariantAnimation.State.Stopped:
-                        anim.stop()
-                except (RuntimeError, AttributeError):
-                    pass
-                finally:
-                    del self._animations[anim_id]
-        except (RuntimeError, KeyError):
-            pass
-    
-    def _cleanup_animations(self):
-        to_remove = []
-        for anim_id, anim in list(self._animations.items()):
-            try:
-                if anim.state() == QVariantAnimation.State.Stopped:
-                    to_remove.append(anim_id)
-            except (RuntimeError, AttributeError):
-                to_remove.append(anim_id)
-        for anim_id in to_remove:
-            try:
-                if anim_id in self._animations:
-                    del self._animations[anim_id]
-            except KeyError:
-                pass
+            port.set_highlighted(False)
     
     def hoverMoveEvent(self, event):
         super().hoverMoveEvent(event)
@@ -492,7 +513,6 @@ class GraphNode(QGraphicsRectItem):
                 self.dragged_node = dragged_node
                 self.is_potential_parent = True
                 self._show_nest_opportunity(dragged_node)
-                self._update_status(f"Drop {dragged_node.block.name} into {self.block.name}")
                 self.hover_check_timer.start(50)
             else:
                 self._clear_nest_opportunity()
@@ -501,16 +521,16 @@ class GraphNode(QGraphicsRectItem):
     
     def hoverEnterEvent(self, event):
         super().hoverEnterEvent(event)
+        self.setBrush(self.hover_brush)
         dragged_blocks = self._get_dragged_blocks()
         if dragged_blocks:
             self.hoverMoveEvent(event)
     
     def hoverLeaveEvent(self, event):
         super().hoverLeaveEvent(event)
+        self.setBrush(self.default_brush)
         self._clear_nest_opportunity()
         self.last_mouse_pos = None
-        if not self.is_dragging_connection:
-            self._update_status("")
     
     def _get_dragged_blocks(self):
         dragged = []
@@ -537,23 +557,42 @@ class GraphNode(QGraphicsRectItem):
     def _check_nest_possibility(self):
         if self.is_potential_parent and self.dragged_node and self.last_mouse_pos:
             if self.contains(self.last_mouse_pos):
-                self.setBrush(self.ready_brush)
+                self.setBrush(self.drop_brush)
                 self.setScale(1.05)
-                time_left = max(0, 500 - self.hover_check_timer.interval())
-                self._update_status(f"Hold for {time_left//100}0ms to nest...", is_warning=True)
             else:
                 self._clear_nest_opportunity()
     
-    def _update_status(self, message, is_warning=False):
-        if self.canvas and hasattr(self.canvas, '_update_status'):
-            self.canvas._update_status(message, is_warning)
+    def _start_nest_animation(self, dragged_node):
+        self.nest_animation_active = True
+        anim = QVariantAnimation()
+        anim.setDuration(1000)
+        anim.setStartValue(1.0)
+        anim.setKeyValueAt(0.5, 1.1)
+        anim.setEndValue(1.0)
+        anim.setLoopCount(-1)
+        anim.valueChanged.connect(self._update_hover_scale)
+        self.hover_animation_id = id(anim)
+        self._animations[self.hover_animation_id] = anim
+        anim.start()
+    
+    def _stop_nest_animation(self):
+        self.nest_animation_active = False
+        if self.hover_animation_id:
+            if self.hover_animation_id in self._animations:
+                anim = self._animations[self.hover_animation_id]
+                anim.stop()
+                del self._animations[self.hover_animation_id]
+            self.hover_animation_id = None
+        self.setScale(1.0)
+    
+    def _update_hover_scale(self, value):
+        self.setScale(value)
     
     def contains(self, point):
         return self.rect().contains(point)
     
     def add_child(self, child_node):
         if child_node not in self.child_nodes:
-            print(f"👪 [GraphNode] Adding child {child_node.block.name} to {self.block.name}")
             self.child_nodes.append(child_node)
             child_node.parent_node = self
             if child_node.block.id not in self.block.children_ids:
@@ -563,106 +602,21 @@ class GraphNode(QGraphicsRectItem):
             if not self.collapse_button and len(self.child_nodes) > 0:
                 self._create_collapse_button()
                 self._center_text()
-            self._animate_child_appearance(child_node)
     
     def remove_child(self, child_node):
         if child_node in self.child_nodes:
-            print(f"👪 [GraphNode] Removing child {child_node.block.name} from {self.block.name}")
             self.child_nodes.remove(child_node)
             child_node.parent_node = None
             if child_node.block.id in self.block.children_ids:
                 self.block.children_ids.remove(child_node.block.id)
-            if not self.child_nodes and self.collapse_button:
-                self.scene().removeItem(self.collapse_button)
-                self.collapse_button = None
-                self._center_text()
-    
-    def remove_from_parent(self):
-        if self.parent_node:
-            old_parent = self.parent_node
-            print(f"📤 [GraphNode] Removing {self.block.name} from parent {old_parent.block.name}")
-            old_parent.remove_child(self)
-            self.block.parent_id = None
-            edges_to_remove = []
-            for edge_id, edge in self.canvas.edges.items():
-                if (edge.source == old_parent and edge.destination == self) or \
-                   (edge.destination == old_parent and edge.source == self):
-                    edges_to_remove.append(edge_id)
-            for edge_id in edges_to_remove:
-                self.canvas.scene.removeItem(self.canvas.edges[edge_id])
-                del self.canvas.edges[edge_id]
-            if hasattr(self.canvas.parent_window, 'update_explorer'):
-                self.canvas.parent_window.update_explorer()
-            if hasattr(self.canvas.parent_window, 'auto_save_project'):
-                self.canvas.parent_window.auto_save_project()
-            self._update_status(f"✓ {self.block.name} removed from parent")
     
     def toggle_collapse(self):
         self.collapsed = not self.collapsed
         if self.collapse_button:
             self.collapse_button.set_collapsed(self.collapsed)
-        
-        # Скрываем/показываем подписи портов
-        for attr_name in ['input_label', 'output_label', 'true_label', 'false_label']:
-            if hasattr(self, attr_name):
-                label = getattr(self, attr_name)
-                label.setVisible(not self.collapsed)
-        
-        if self.collapsed:
-            external = self.analyze_external_connections()
-            for conn_info in external:
-                self._create_proxy_edge(conn_info)
-            for child in self.child_nodes:
-                self._animate_collapse(child)
-        else:
-            for proxy in self.proxy_edges:
-                if proxy in self.canvas.edges.values():
-                    self.canvas.scene.removeItem(proxy)
-                    for edge_id, edge in list(self.canvas.edges.items()):
-                        if edge == proxy:
-                            del self.canvas.edges[edge_id]
-                            break
-            self.proxy_edges.clear()
-            for child in self.child_nodes:
-                self._animate_expand(child)
-            for child in self.child_nodes:
-                for edge in child.edges:
-                    edge.show()
         self.canvas.update_connections()
         self.update()
-
-    def _create_proxy_edge(self, conn_info):
-        from ui.SE.core.models import Connection
-        child = conn_info['child']
-        original_edge = conn_info['edge']
-        other_node = conn_info['other_node']
-        direction = conn_info['direction']
-        if direction == 'out':
-            proxy_conn = Connection(
-                from_block_id=self.block.id,
-                from_port=original_edge.source_port,
-                to_block_id=other_node.block.id,
-                to_port=original_edge.dest_port,
-                data_type="proxy"
-            )
-            proxy_edge = self.canvas.add_connection(proxy_conn, "proxy")
-        else:
-            proxy_conn = Connection(
-                from_block_id=other_node.block.id,
-                from_port=original_edge.source_port,
-                to_block_id=self.block.id,
-                to_port=original_edge.dest_port,
-                data_type="proxy"
-            )
-            proxy_edge = self.canvas.add_connection(proxy_conn, "proxy")
-        if proxy_edge:
-            proxy_edge.original_edge = original_edge
-            proxy_edge.source_child = child
-            self.proxy_edges.append(proxy_edge)
-            original_edge.hide()
-        return proxy_edge
     
-
     def contextMenuEvent(self, event):
         menu = QMenu()
         
@@ -672,17 +626,12 @@ class GraphNode(QGraphicsRectItem):
         
         rename_action = menu.addAction("✏️ Rename")
         rename_action.triggered.connect(self._rename_block)
-        menu.addAction(rename_action)
-        
-        menu.addSeparator()
         
         delete_action = menu.addAction("🗑️ Delete")
         delete_action.triggered.connect(self._delete_block)
-        menu.addAction(delete_action)
         
-        if self.child_nodes:
-            menu.addSeparator()
-            menu.addAction(f"📦 Children: {len(self.child_nodes)}").setEnabled(False)
+        menu.addAction(rename_action)
+        menu.addAction(delete_action)
         
         if self.parent_node:
             menu.addSeparator()
@@ -690,39 +639,28 @@ class GraphNode(QGraphicsRectItem):
             exit_action.triggered.connect(self.remove_from_parent)
             menu.addAction(exit_action)
         
-        menu.addSeparator()
-        info_action = menu.addAction(f"ID: {self.block.id}")
-        info_action.setEnabled(False)
-        menu.addAction(info_action)
-        
         menu.exec(event.screenPos())
-
-    def _select_child(self, child_node):
-        self.canvas.select_block(child_node.block.id)
     
     def _rename_block(self):
         new_name, ok = QInputDialog.getText(None, "Rename Block", "Enter new name:", text=self.block.name)
         if ok and new_name:
-            old_name = self.block.name
             self.block.name = new_name
             self.text_item.setPlainText(new_name)
             self._center_text()
-            print(f"✏️ [GraphNode] Block renamed: {old_name} → {new_name}")
-            self._update_status(f"Renamed to '{new_name}'")
-            if self.canvas and self.canvas.parent_window and hasattr(self.canvas.parent_window, 'palette'):
-                self.canvas.parent_window.palette.update_reference_block(self.block.id, new_name)
             if hasattr(self.canvas.parent_window, 'auto_save_project'):
                 self.canvas.parent_window.auto_save_project()
     
     def _delete_block(self):
-        reply = QMessageBox.question(None, "Delete Block", f"Are you sure you want to delete '{self.block.name}'?",
+        reply = QMessageBox.question(None, "Delete Block", f"Delete '{self.block.name}'?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            print(f"🗑️ [GraphNode] Deleting block {self.block.name} (id={self.block.id})")
+            self.canvas.remove_block_with_animation(self.block.id)
+    
+    def remove_from_parent(self):
+        if self.parent_node:
+            self.parent_node.remove_child(self)
+            self.block.parent_id = None
             self.canvas.remove_block(self.block.id)
-            self._update_status(f"Deleted '{self.block.name}'")
-            if hasattr(self.canvas.parent_window, 'auto_save_project'):
-                self.canvas.parent_window.auto_save_project()
     
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -754,10 +692,8 @@ class GraphNode(QGraphicsRectItem):
         if event.buttons() & Qt.MouseButton.LeftButton:
             if not self._is_dragging and self._drag_start_pos:
                 move_distance = (event.pos() - self._drag_start_pos).manhattanLength()
-                time_elapsed = self._drag_start_time.msecsTo(QTime.currentTime())
-                if move_distance > QApplication.startDragDistance() or time_elapsed > 200:
+                if move_distance > QApplication.startDragDistance():
                     self._is_dragging = True
-                    print(f"🖱️ [GraphNode] Started dragging block {self.block.name}")
         super().mouseMoveEvent(event)
     
     def mouseReleaseEvent(self, event):
@@ -785,13 +721,11 @@ class GraphNode(QGraphicsRectItem):
                     self.finish_connection_drag(target_node, target_port.port_type)
                 else:
                     self.cancel_connection_drag()
-                    self._update_status("❌ Connection cancelled", is_warning=True)
                 event.accept()
                 return
             if self._is_dragging:
                 new_pos = self.pos()
                 if self._original_pos and self._original_pos != new_pos:
-                    print(f"📍 [GraphNode] Block {self.block.name} moved: ({self._original_pos.x()}, {self._original_pos.y()}) → ({new_pos.x()}, {new_pos.y()})")
                     self.block.position["x"] = new_pos.x()
                     self.block.position["y"] = new_pos.y()
                     for edge in self.edges:
@@ -816,9 +750,7 @@ class GraphNode(QGraphicsRectItem):
                     if item.is_potential_parent and not self._would_create_cycle(item):
                         distance = (self.pos() - item.pos()).manhattanLength()
                         if distance < 200:
-                            print(f"🏠 [GraphNode] Nesting {self.block.name} into {item.block.name}")
                             self.canvas.nest_block(self, item)
-                            self._update_status(f"✓ Nested '{self.block.name}' in '{item.block.name}'")
                             item._clear_nest_opportunity()
                             break
     
@@ -832,21 +764,12 @@ class GraphNode(QGraphicsRectItem):
     
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
-            new_pos = value
             if self._is_dragging:
-                old_pos = self.pos()
-                delta_x = new_pos.x() - old_pos.x()
-                delta_y = new_pos.y() - old_pos.y()
+                new_pos = value
                 self.block.position["x"] = new_pos.x()
                 self.block.position["y"] = new_pos.y()
                 for edge in self.edges:
                     edge.update_position()
-                if self.child_nodes and (abs(delta_x) > 0 or abs(delta_y) > 0):
-                    self.move_children(delta_x, delta_y)
-                if hasattr(self.canvas, 'parent_window'):
-                    main_window = self.canvas.parent_window
-                    if hasattr(main_window, 'update_position_label'):
-                        main_window.update_position_label(new_pos.x(), new_pos.y())
                 return new_pos
         elif change == QGraphicsItem.GraphicsItemChange.ItemSelectedChange:
             if value and self.scene():
@@ -863,40 +786,9 @@ class GraphNode(QGraphicsRectItem):
         path.addRoundedRect(self.rect(), self._radius, self._radius)
         painter.drawPath(path)
         
-        # Для IfBlock показываем условие на блоке
-        if self.block.node_type == "if":
-            condition = f"{self.block.params.get('left', '?')} {self.block.params.get('operator', '?')} {self.block.params.get('right', '?')}"
-            if len(condition) > 20:
-                condition = condition[:17] + "..."
-            painter.setPen(QPen(QColor("#f39c12"), 1))
-            painter.setFont(QFont("Arial", 7))
-            painter.drawText(self.rect().adjusted(5, 25, -5, -5), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, condition)
-        
-        if hasattr(self.block, 'is_reference_block') and self.block.is_reference_block():
-            painter.setPen(QPen(QColor("#f39c12"), 2))
-            painter.setFont(QFont("Arial", 12))
-            painter.drawText(self.rect().adjusted(5, 5, -5, -5), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight, "🔗")
-        if self.child_nodes:
-            count_text = str(len(self.child_nodes))
-            painter.setPen(QPen(QColor("#888888"), 1))
-            painter.setFont(QFont("Arial", 8))
-            painter.drawText(self.rect().adjusted(5, 5, -5, -5), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight, count_text)
         if self.isSelected():
             painter.setPen(QPen(QColor("#f39c12"), 3))
             painter.drawRoundedRect(self.rect().adjusted(-2, -2, 2, 2), self._radius + 2, self._radius + 2)
-        if self.is_potential_parent:
-            painter.setPen(QPen(QColor("#2ecc71"), 3, Qt.PenStyle.DashLine))
-            painter.drawRoundedRect(self.rect().adjusted(-5, -5, 5, 5), self._radius + 5, self._radius + 5)
-            painter.setPen(QPen(QColor("#2ecc71")))
-            painter.setFont(QFont("Arial", 8))
-            painter.drawText(self.rect().adjusted(0, -20, 0, 0), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, "▼ Drop to nest here ▼")
-        if self.ready_to_nest:
-            painter.setPen(QPen(QColor("#f39c12"), 3, Qt.PenStyle.DotLine))
-            painter.drawRoundedRect(self.rect().adjusted(-3, -3, 3, 3), self._radius + 3, self._radius + 3)
-        if self.parent_node:
-            painter.setPen(QPen(QColor("#888888")))
-            painter.setFont(QFont("Arial", 10))
-            painter.drawText(self.rect().adjusted(5, 5, -5, -5), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, "🏠")
     
     def add_edge(self, edge):
         if edge not in self.edges:
@@ -912,313 +804,17 @@ class GraphNode(QGraphicsRectItem):
                 main_window = self.canvas.parent_window
                 if hasattr(main_window, 'auto_save_project'):
                     main_window.auto_save_project()
-        except Exception as e:
-            print(f"⚠️ Auto-save error: {e}")
-
-
-class PortItem(QGraphicsEllipseItem):
-    """Порт для соединений (INPUT слева, OUTPUT/TRUE/FALSE справа)"""
-    
-    def __init__(self, port_type, parent_node, size=8):
-        print(f"🔌 [PortItem] __init__: {port_type} for {parent_node.block.name}")
-        super().__init__(-size/2, -size/2, size, size, parent_node)
-        self.port_type = port_type
-        self.parent_node = parent_node
-        self.setAcceptHoverEvents(True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
-        
-        # Настройка цветов портов
-        if port_type == "input":
-            self.default_brush = QBrush(QColor("#e74c3c"))  # Красный для INPUT
-            self.highlight_brush = QBrush(QColor("#f1c40f"))
-        elif port_type == "output":
-            self.default_brush = QBrush(QColor("#2ecc71"))  # Зелёный для OUTPUT
-            self.highlight_brush = QBrush(QColor("#f39c12"))
-        elif port_type == "true":
-            self.default_brush = QBrush(QColor("#2ecc71"))  # Зелёный для TRUE
-            self.highlight_brush = QBrush(QColor("#f39c12"))
-        elif port_type == "false":
-            self.default_brush = QBrush(QColor("#2ecc71"))  # Зелёный для FALSE (было #e74c3c)
-            self.highlight_brush = QBrush(QColor("#f39c12"))
-        else:
-            self.default_brush = QBrush(QColor("#3498db"))
-            self.highlight_brush = QBrush(QColor("#f1c40f"))
-        
-        self.setBrush(self.default_brush)
-        self.setZValue(10)
-        self.setData(0, port_type)
-
-    def set_highlighted(self, highlighted):
-        self.setBrush(self.highlight_brush if highlighted else self.default_brush)
-    
-    def hoverEnterEvent(self, event):
-        self.setBrush(self.highlight_brush)
-        self.setScale(1.2)
-        if self.port_type == "input":
-            tooltip = "INPUT (receives data from previous block)"
-        elif self.port_type == "output":
-            tooltip = "OUTPUT (sends data to next block)"
-        elif self.port_type == "true":
-            tooltip = "TRUE BRANCH (executes when condition is TRUE)"
-        elif self.port_type == "false":
-            tooltip = "FALSE BRANCH (executes when condition is FALSE)"
-        else:
-            tooltip = f"PORT: {self.port_type}"
-        self.setToolTip(tooltip)
-        super().hoverEnterEvent(event)
-
-    def hoverLeaveEvent(self, event):
-        self.setBrush(self.default_brush)
-        self.setScale(1.0)
-        super().hoverLeaveEvent(event)
-    
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            print(f"🔌 [PortItem] mousePress: {self.port_type} on {self.parent_node.block.name}")
-            self.setSelected(True)
-            self.parent_node.start_connection_drag(self.port_type)
-            event.accept()
-        else:
-            super().mousePressEvent(event)
-    
-    def mouseMoveEvent(self, event):
-        if self.parent_node and self.parent_node.is_dragging_connection:
-            scene_pos = self.mapToScene(event.pos())
-            self.parent_node.update_temp_connection(scene_pos)
-            event.accept()
-        else:
-            super().mouseMoveEvent(event)
-    
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            if self.parent_node and self.parent_node.is_dragging_connection:
-                scene_pos = self.mapToScene(event.pos())
-                items = self.scene().items(scene_pos)
-                target_port = None
-                target_node = None
-                for item in items:
-                    if isinstance(item, PortItem) and item != self:
-                        target_port = item
-                        target_node = item.parent_node
-                        break
-                if target_port and target_node:
-                    self.parent_node.finish_connection_drag(target_node, target_port.port_type)
-                else:
-                    self.parent_node.cancel_connection_drag()
-                event.accept()
-        else:
-            super().mouseReleaseEvent(event)
-
-
-class GraphEdge(QGraphicsPathItem):
-    """Графическое представление соединения между блоками"""
-    
-    def __init__(self, connection, canvas, edge_type="data"):
-        print(f"🔗 [GraphEdge] __init__: {connection.id} type={edge_type}")
-        super().__init__()
-        self.connection = connection
-        self.canvas = canvas
-        self.source = None
-        self.destination = None
-        self.source_port = connection.from_port
-        self.dest_port = connection.to_port
-        self.edge_type = edge_type
-        self.original_edge = None
-        self.source_child = None
-        
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        self.setZValue(-1)
-        self.pen_width = 2
-        self.setAcceptHoverEvents(True)
-        
-        # Разные цвета для разных типов портов
-        if connection.from_port == "true":
-            self.data_color = QColor("#2ecc71")
-        elif connection.from_port == "false":
-            self.data_color = QColor("#e74c3c")
-        else:
-            self.data_color = QColor("#3498db")
-        
-        self.inheritance_color = QColor("#9b59b6")
-        self.proxy_color = QColor("#f39c12")
-    
-
-    def contextMenuEvent(self, event):
-        menu = QMenu()
-        
-        info_action = menu.addAction(f"Connection: {self.source.block.name} → {self.destination.block.name}")
-        info_action.setEnabled(False)
-        menu.addSeparator()
-        
-        delete_action = menu.addAction("🗑️ Delete connection")
-        delete_action.triggered.connect(self.delete_connection)
-        menu.addAction(delete_action)
-        
-        menu.addSeparator()
-        id_action = menu.addAction(f"ID: {self.connection.id[:8]}...")
-        id_action.setEnabled(False)
-        menu.addAction(id_action)
-        
-        menu.exec(event.screenPos())
-
-    def delete_connection(self):
-        """Удаляет соединение"""
-        if self.canvas:
-            if hasattr(self, 'original_edge') and self.original_edge:
-                self.original_edge.show()
-            
-            self.canvas.remove_connection(self.connection.id)
-    
-    def set_source(self, node):
-        self.source = node
-        self.update_position()
-    
-    def set_destination(self, node):
-        self.destination = node
-        self.update_position()
-    
-    def update_position(self):
-        if self.source and self.destination:
-            self.prepareGeometryChange()
-            source_point = self.source.get_port_position(self.source_port)
-            dest_point = self.destination.get_port_position(self.dest_port)
-            self.source_pos = source_point
-            self.dest_pos = dest_point
-            self.setPos(QPointF(0, 0))
-            self.update_path()
-
-    def update_path(self):
-        if not hasattr(self, 'source_pos') or not hasattr(self, 'dest_pos'):
-            return
-        source_port_pos = self.source_pos
-        dest_port_pos = self.dest_pos
-        source_rect = self.source.rect()
-        dest_rect = self.destination.rect()
-        source_scene_pos = self.source.scenePos()
-        dest_scene_pos = self.destination.scenePos()
-        source_right = source_scene_pos.x() + source_rect.width()
-        dest_left = dest_scene_pos.x()
-        need_special = dest_left < source_right + 10
-        arrow_distance = 15
-        if self.dest_port == "input":
-            arrow_center = QPointF(dest_port_pos.x() - arrow_distance, dest_port_pos.y())
-        else:
-            arrow_center = QPointF(dest_port_pos.x() + arrow_distance, dest_port_pos.y())
-        target_pos = arrow_center + QPointF(-10, 0)
-        path = QPainterPath()
-        path.moveTo(source_port_pos)
-        if self.edge_type == "inheritance":
-            dx = target_pos.x() - source_port_pos.x()
-            ctrl1 = QPointF(source_port_pos.x() + dx * 0.25, source_port_pos.y())
-            ctrl2 = QPointF(target_pos.x() - dx * 0.25, target_pos.y())
-            path.cubicTo(ctrl1, ctrl2, target_pos)
-        elif need_special and self.edge_type == "data":
-            source_center_y = source_scene_pos.y() + source_rect.height() / 2
-            dest_center_y = dest_scene_pos.y() + dest_rect.height() / 2
-            is_above = dest_center_y < source_center_y
-            vertical_offset = 30
-            if is_above:
-                exit_point = QPointF(source_port_pos.x(), source_scene_pos.y() - vertical_offset)
-                entry_point = QPointF(target_pos.x(), dest_scene_pos.y() + dest_rect.height() + vertical_offset)
-            else:
-                exit_point = QPointF(source_port_pos.x(), source_scene_pos.y() + source_rect.height() + vertical_offset)
-                entry_point = QPointF(target_pos.x(), dest_scene_pos.y() - vertical_offset)
-            path.lineTo(exit_point)
-            dx = entry_point.x() - exit_point.x()
-            ctrl1 = QPointF(exit_point.x() + dx * 0.25, exit_point.y())
-            ctrl2 = QPointF(entry_point.x() - dx * 0.25, entry_point.y())
-            path.cubicTo(ctrl1, ctrl2, entry_point)
-            path.lineTo(target_pos)
-        else:
-            dx = target_pos.x() - source_port_pos.x()
-            ctrl1 = QPointF(source_port_pos.x() + dx * 0.25, source_port_pos.y())
-            ctrl2 = QPointF(target_pos.x() - dx * 0.25, target_pos.y())
-            path.cubicTo(ctrl1, ctrl2, target_pos)
-        self.setPath(path)
-        self.arrow_center = arrow_center
-        self.arrow_base = target_pos
-    
-    def paint(self, painter, option, widget=None):
-        if not self.source or not self.destination:
-            return
-        if self.edge_type == "inheritance":
-            color = self.inheritance_color
-            pen = QPen(color)
-            pen.setWidth(self.pen_width)
-            pen.setStyle(Qt.PenStyle.SolidLine)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.setPen(pen)
-            painter.drawPath(self.path())
-        elif self.edge_type == "proxy":
-            color = self.proxy_color
-            pen = QPen(color)
-            pen.setWidth(self.pen_width)
-            pen.setStyle(Qt.PenStyle.DashLine)
-            pen.setDashPattern([5, 3])
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.setPen(pen)
-            painter.drawPath(self.path())
-            if self.source_child:
-                painter.save()
-                painter.setPen(QPen(color, 1))
-                painter.setFont(QFont("Arial", 6))
-                mid_point = self.path().pointAtPercent(0.5)
-                painter.drawText(mid_point + QPointF(5, -5), f"↪ {self.source_child.block.name}")
-                painter.restore()
-        else:
-            color = self.data_color
-            pen = QPen(color)
-            pen.setWidth(self.pen_width)
-            pen.setStyle(Qt.PenStyle.SolidLine)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.setPen(pen)
-            painter.drawPath(self.path())
-            self.draw_arrow(painter, color)
-        if self.isSelected():
-            highlight_pen = QPen(QColor("#f39c12"), self.pen_width + 2, Qt.PenStyle.DotLine)
-            painter.setPen(highlight_pen)
-            painter.drawPath(self.path())
-    
-    def draw_arrow(self, painter, color):
-        if not hasattr(self, 'arrow_center') or not self.source or not self.destination:
-            return
-        arrow_center = self.arrow_center
-        arrow_size = 12
-        arrow_width = 8
-        old_pen = painter.pen()
-        old_brush = painter.brush()
-        painter.setBrush(QBrush(color))
-        painter.setPen(QPen(color, 1))
-        points = [
-            arrow_center + QPointF(arrow_size/2, 0),
-            arrow_center + QPointF(-arrow_size/2, -arrow_width/2),
-            arrow_center + QPointF(-arrow_size/2, arrow_width/2)
-        ]
-        triangle = QPolygonF(points)
-        painter.drawPolygon(triangle)
-        painter.setPen(old_pen)
-        painter.setBrush(old_brush)
-    
-    def hoverEnterEvent(self, event):
-        self.pen_width = 3
-        self.update()
-        super().hoverEnterEvent(event)
-    
-    def hoverLeaveEvent(self, event):
-        self.pen_width = 2
-        self.update()
-        super().hoverLeaveEvent(event)
+        except Exception:
+            pass
 
 
 class CanvasWidget(QGraphicsView):
-    """Виджет канваса с поддержкой соединений"""
+    """Виджет канваса с поддержкой соединений, горячих клавиш и анимаций"""
     
     block_selected = Signal(object)
     block_double_clicked = Signal(object)
     
     def __init__(self):
-        print("🏁 [CANVAS] __init__ START")
         super().__init__()
         
         self.scene = QGraphicsScene()
@@ -1229,18 +825,27 @@ class CanvasWidget(QGraphicsView):
         self.edges: Dict[str, GraphEdge] = {}
         self.next_id = 1
         
-        self.grid_size = 20
+        # Сетка с точками
         self.grid_enabled = True
         self.zoom_factor = 1.0
         self.zoom_min = 0.1
         self.zoom_max = 5.0
         self.zoom_step = 1.1
+        self._mouse_scene_pos = None
+        
+        self.grid_spacing = 60
+        self.grid_dot_radius = 4
+        self.repel_radius = 250
+        
+        self._grid_points = {}
+        self._grid_velocities = {}
+        self._visible_rect = QRectF()
         
         self.parent_window = None
-        
         self._is_panning = False
         self._last_pan_pos = None
         self._dragging_block = False
+        self._move_step = 20
         
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setRenderHint(QPainter.RenderHint.TextAntialiasing)
@@ -1256,103 +861,443 @@ class CanvasWidget(QGraphicsView):
         self.setAcceptDrops(True)
         self.viewport().setAcceptDrops(True)
         
-        self.setBackgroundBrush(QBrush(QColor("#1e1e1e")))
+        self.setBackgroundBrush(QBrush(QColor("#0a0a1a")))
         self.setMinimumSize(400, 300)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
         self.scene.selectionChanged.connect(self.on_selection_changed)
+        
+        self.grid_update_timer = QTimer()
+        self.grid_update_timer.timeout.connect(self.update_grid)
+        self.grid_update_timer.start(16)
         
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_nest_states)
         self.update_timer.start(50)
         
         self.status_label = None
+    
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ СЕТКИ
+    # ========================================================================
+    
+    def _get_key(self, x, y):
+        return f"{int(x)}_{int(y)}"
+    
+    def _update_visible_points(self, rect):
+        padding = 200
+        visible_rect = rect.adjusted(-padding, -padding, padding, padding)
         
-        print("🏁 [CANVAS] __init__ END")
-
+        if self._visible_rect == visible_rect:
+            return
+        
+        self._visible_rect = visible_rect
+        
+        spacing = self.grid_spacing / self.zoom_factor
+        spacing = max(10, min(100, spacing))
+        
+        left = int(visible_rect.left()) - (int(visible_rect.left()) % spacing) - spacing
+        top = int(visible_rect.top()) - (int(visible_rect.top()) % spacing) - spacing
+        right = int(visible_rect.right()) + spacing
+        bottom = int(visible_rect.bottom()) + spacing
+        
+        new_points = {}
+        new_velocities = {}
+        
+        x = left
+        while x <= right:
+            y = top
+            while y <= bottom:
+                key = self._get_key(x, y)
+                if key in self._grid_points:
+                    new_points[key] = self._grid_points[key][:]
+                    new_velocities[key] = self._grid_velocities[key][:]
+                else:
+                    new_points[key] = [x, y]
+                    new_velocities[key] = [0.0, 0.0]
+                y += spacing
+            x += spacing
+        
+        self._grid_points = new_points
+        self._grid_velocities = new_velocities
+    
+    def update_grid(self):
+        if self._mouse_scene_pos:
+            self.viewport().update()
+    
+    def drawBackground(self, painter, rect):
+        super().drawBackground(painter, rect)
+        
+        if not self.grid_enabled:
+            return
+        
+        if not self._mouse_scene_pos:
+            self._mouse_scene_pos = QPointF(0, 0)
+        
+        self._update_visible_points(rect)
+        
+        if not self._grid_points:
+            return
+        
+        spacing = self.grid_spacing / self.zoom_factor
+        spacing = max(10, min(100, spacing))
+        
+        dot_size = self.grid_dot_radius / self.zoom_factor
+        dot_size = max(1, min(8, dot_size))
+        
+        mouse_x = self._mouse_scene_pos.x()
+        mouse_y = self._mouse_scene_pos.y()
+        
+        repel_radius = self.repel_radius / self.zoom_factor
+        repel_radius = max(50, min(500, repel_radius))
+        
+        for key, point in self._grid_points.items():
+            px, py = point[0], point[1]
+            
+            if not rect.contains(px, py):
+                continue
+            
+            dx = px - mouse_x
+            dy = py - mouse_y
+            dist = math.sqrt(dx*dx + dy*dy)
+            
+            velocity = self._grid_velocities.get(key, [0.0, 0.0])
+            vx, vy = velocity[0], velocity[1]
+            
+            if dist < repel_radius and dist > 1:
+                angle = math.atan2(dy, dx)
+                force = 3.0 * (1 - dist / repel_radius) ** 3
+                vx += math.cos(angle) * force
+                vy += math.sin(angle) * force
+            
+            orig_x = int(key.split('_')[0])
+            orig_y = int(key.split('_')[1])
+            
+            return_dx = orig_x - px
+            return_dy = orig_y - py
+            return_dist = math.sqrt(return_dx*return_dx + return_dy*return_dy)
+            
+            if return_dist > 0.5:
+                norm_x = return_dx / return_dist
+                norm_y = return_dy / return_dist
+                vx += norm_x * 0.25
+                vy += norm_y * 0.25
+            
+            vx *= 0.85
+            vy *= 0.85
+            
+            new_x = px + vx
+            new_y = py + vy
+            
+            speed = math.sqrt(vx*vx + vy*vy)
+            if speed < 0.05 and return_dist < 1.0:
+                vx = 0
+                vy = 0
+                new_x = orig_x
+                new_y = orig_y
+            
+            self._grid_velocities[key] = [vx, vy]
+            self._grid_points[key] = [new_x, new_y]
+            
+            if dist < repel_radius:
+                t = 1.0 - (dist / repel_radius)
+                brightness = 150 + int(105 * t)
+                alpha = 200 + int(55 * t)
+                color = QColor(160, 216, 255, alpha)
+                current_dot_size = dot_size * (1.0 + 0.5 * t)
+            else:
+                color = QColor(100, 180, 255, 80)
+                current_dot_size = dot_size
+            
+            painter.setBrush(QBrush(color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(new_x, new_y), current_dot_size, current_dot_size)
+            
+            if dist < repel_radius * 0.5:
+                center_size = current_dot_size * 0.4
+                painter.setBrush(QBrush(QColor(255, 255, 255, 150)))
+                painter.drawEllipse(QPointF(new_x, new_y), center_size, center_size)
+    
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ РАБОТЫ С БЛОКАМИ
+    # ========================================================================
+    
+    def add_block_with_animation(self, node_type: str, name: str, x: float, y: float, color: str = "#3498db"):
+        """Добавляет блок с анимацией молнии"""
+        print(f"⚡ [CANVAS] add_block_with_animation: {name} at ({x}, {y})")
+        
+        node = self.add_block_from_data(node_type, name, x, y, color)
+        
+        if not node:
+            print(f"❌ [CANVAS] Failed to create block: {name}")
+            return None
+        
+        print(f"✅ [CANVAS] Block created and added: id={node.block.id}")
+        
+        node.setOpacity(0.0)
+        node.setScale(0.3)
+        
+        effect = LightningEffectItem(QPointF(x + 80, y + 30), color)
+        self.scene.addItem(effect)
+        print(f"⚡ [CANVAS] Lightning effect added")
+        
+        self.scene.update()
+        self.viewport().update()
+        
+        anim = QVariantAnimation()
+        anim.setDuration(600)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        
+        def update_anim(value):
+            ease = 1 - math.pow(1 - value, 3)
+            node.setOpacity(ease)
+            node.setScale(0.3 + 0.7 * ease)
+            node.setPos(x, y - 15 * (1 - ease))
+            self.viewport().update()
+        
+        def finish_anim():
+            node.setPos(x, y)
+            node.setScale(1.0)
+            node.setOpacity(1.0)
+            self.scene.update()
+            self.viewport().update()
+            print(f"✅ [CANVAS] Block '{name}' fully appeared!")
+            self._update_status(f"⚡ Block '{name}' appeared!")
+        
+        anim.valueChanged.connect(update_anim)
+        anim.finished.connect(finish_anim)
+        anim.start()
+        
+        return node
+    
+    def add_block_from_data(self, node_type: str, name: str, x: float = 0, y: float = 0, color: str = "#3498db"):
+        """Создает блок и добавляет его на сцену"""
+        from ui.SE.core.models import Block
+        
+        try:
+            print(f"🟣 [CANVAS] add_block_from_data: type={node_type}, name={name}, pos=({x},{y})")
+            
+            block = Block(
+                block_id=self.next_id,
+                node_type=node_type,
+                name=name,
+                x=x,
+                y=y,
+                color=color
+            )
+            block.params = block.get_default_params()
+            print(f"🟣 [CANVAS] Block created: id={block.id}")
+            
+            node = GraphNode(block, self)
+            node.setOpacity(0.0)
+            node.setScale(0.3)
+            node.setPos(x, y)
+            
+            self.scene.addItem(node)
+            self.nodes[block.id] = node
+            print(f"🟣 [CANVAS] Node added to scene, total: {len(self.nodes)}")
+            
+            self.next_id += 1
+            print(f"🟣 [CANVAS] next_id now: {self.next_id}")
+            
+            self.scene.clearSelection()
+            node.setSelected(True)
+            self.block_selected.emit(node)
+            
+            self.scene.update()
+            self.viewport().update()
+            
+            print(f"✅ [CANVAS] Block '{name}' added to scene")
+            
+            return node
+        except Exception as e:
+            print(f"❌ [CANVAS] Error adding block: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def remove_block_with_animation(self, block_id: int):
+        """Удаляет блок с анимацией исчезновения"""
+        if block_id not in self.nodes:
+            return False
+        
+        node = self.nodes[block_id]
+        print(f"💨 [CANVAS] Removing block with animation: {node.block.name}")
+        
+        anim = QVariantAnimation()
+        anim.setDuration(400)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+        
+        def update_anim(value):
+            node.setOpacity(value)
+            node.setScale(0.3 + 0.7 * value)
+            node.setPos(node.pos().x(), node.pos().y() + 5 * (1 - value))
+            self.viewport().update()
+        
+        def finish_anim():
+            self.remove_block(block_id)
+            self.scene.update()
+            self.viewport().update()
+            print(f"✅ [CANVAS] Block '{node.block.name}' removed")
+        
+        anim.valueChanged.connect(update_anim)
+        anim.finished.connect(finish_anim)
+        anim.start()
+        
+        return True
+    
+    def remove_block(self, block_id):
+        """Удаляет блок без анимации"""
+        if block_id in self.nodes:
+            node = self.nodes[block_id]
+            print(f"🗑️ [CANVAS] Removing block: {node.block.name}")
+            
+            edges_to_remove = []
+            for edge_id, edge in self.edges.items():
+                if edge.source == node or edge.destination == node:
+                    edges_to_remove.append(edge_id)
+            
+            for edge_id in edges_to_remove:
+                edge = self.edges[edge_id]
+                if edge.source:
+                    edge.source.remove_edge(edge)
+                if edge.destination:
+                    edge.destination.remove_edge(edge)
+                self.scene.removeItem(edge)
+                del self.edges[edge_id]
+            
+            if node.parent_node:
+                node.parent_node.remove_child(node)
+            
+            for child in node.child_nodes[:]:
+                self.remove_block(child.block.id)
+            
+            self.scene.removeItem(node)
+            del self.nodes[block_id]
+            
+            self.scene.update()
+            self.viewport().update()
+            
+            return True
+        return False
+    
     def delete_selected_blocks(self):
-        """Удаляет все выбранные блоки и их связи"""
+        """Удаляет все выбранные блоки с анимацией"""
         selected_items = self.scene.selectedItems()
         blocks_to_delete = [item for item in selected_items if isinstance(item, GraphNode)]
         
         if not blocks_to_delete:
-            self._update_status("No blocks selected to delete", is_warning=True)
             return False
         
         if len(blocks_to_delete) > 1:
             reply = QMessageBox.question(
-                None, 
-                "Delete Blocks", 
-                f"Delete {len(blocks_to_delete)} selected blocks and their connections?",
+                None, "Delete Blocks",
+                f"Delete {len(blocks_to_delete)} selected blocks?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return False
         
-        deleted_count = 0
         for node in blocks_to_delete:
-            if self.remove_block(node.block.id):
-                deleted_count += 1
+            self.remove_block_with_animation(node.block.id)
         
-        self._update_status(f"✅ Deleted {deleted_count} blocks")
         self.block_selected.emit(None)
-        return True
-
-    def delete_all_blocks(self):
-        """Удаляет все блоки на канвасе"""
-        if not self.nodes:
-            return False
-        
-        reply = QMessageBox.question(
-            None, 
-            "Clear Canvas", 
-            f"Delete all {len(self.nodes)} blocks and their connections?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self.clear()
-            self._update_status("✅ All blocks deleted")
-            self.block_selected.emit(None)
-            return True
-        return False
-
-    def delete_selected_connections(self):
-        """Удаляет все выбранные связи"""
-        selected_items = self.scene.selectedItems()
-        edges_to_delete = [item for item in selected_items if isinstance(item, GraphEdge)]
-        
-        if not edges_to_delete:
-            return False
-        
-        deleted_count = 0
-        for edge in edges_to_delete:
-            if self.remove_connection(edge.connection.id):
-                deleted_count += 1
-        
-        self._update_status(f"✅ Deleted {deleted_count} connections")
+        self.scene.update()
+        self.viewport().update()
         return True
     
-    def _update_status(self, message: str, is_warning: bool = False):
-        try:
-            if not message or message.strip() == "":
-                return
-            
-            if self.parent_window and hasattr(self.parent_window, 'update_status'):
-                self.parent_window.update_status(message, is_warning)
-            elif self.parent_window and hasattr(self.parent_window, 'status_label'):
-                self.parent_window.status_label.setText(message)
-                if is_warning:
-                    self.parent_window.status_label.setStyleSheet("color: #f39c12;")
-                else:
-                    self.parent_window.status_label.setStyleSheet("")
-            elif self.status_label:
-                self.status_label.setText(message)
-                if is_warning:
-                    self.status_label.setStyleSheet("color: #f39c12;")
-                else:
-                    self.status_label.setStyleSheet("")
-        except Exception as e:
-            print(f"Error updating status: {e}")
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ РАБОТЫ С СОЕДИНЕНИЯМИ
+    # ========================================================================
+    
+    def add_connection(self, connection, connection_type="data"):
+        edge = GraphEdge(connection, self, connection_type)
+        from_node = self.nodes.get(connection.from_block_id)
+        to_node = self.nodes.get(connection.to_block_id)
+        if from_node and to_node:
+            edge.set_source(from_node)
+            edge.set_destination(to_node)
+            self.scene.addItem(edge)
+            self.edges[connection.id] = edge
+            if connection_type != "proxy":
+                from_node.add_edge(edge)
+                to_node.add_edge(edge)
+            self.scene.update()
+            self.viewport().update()
+            return edge
+        return None
+    
+    def remove_connection(self, connection_id):
+        if connection_id in self.edges:
+            edge = self.edges[connection_id]
+            if edge.source:
+                edge.source.remove_edge(edge)
+            if edge.destination:
+                edge.destination.remove_edge(edge)
+            self.scene.removeItem(edge)
+            del self.edges[connection_id]
+            self.scene.update()
+            self.viewport().update()
+            return True
+        return False
+    
+    def update_connections(self):
+        for edge in self.edges.values():
+            edge.update_position()
+    
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ РАБОТЫ С ВЛОЖЕННОСТЬЮ
+    # ========================================================================
+    
+    def nest_block(self, child_node, parent_node):
+        if child_node == parent_node:
+            return False
+        if child_node._would_create_cycle(parent_node):
+            return False
+        if child_node.parent_node:
+            child_node.parent_node.remove_child(child_node)
+        parent_node.add_child(child_node)
+        child_node.setPos(parent_node.pos().x() + 50, parent_node.pos().y() + 50)
+        child_node.block.parent_id = parent_node.block.id
+        if child_node.block.id not in parent_node.block.children_ids:
+            parent_node.block.children_ids.append(child_node.block.id)
+        
+        from ui.SE.core.models import Connection
+        conn = Connection(
+            from_block_id=parent_node.block.id,
+            from_port="center",
+            to_block_id=child_node.block.id,
+            to_port="center",
+            data_type="inheritance"
+        )
+        self.add_connection(conn, "inheritance")
+        
+        self.scene.update()
+        self.viewport().update()
+        
+        if hasattr(self.parent_window, 'auto_save_project'):
+            self.parent_window.auto_save_project()
+        return True
+    
+    # ========================================================================
+    # УПРАВЛЕНИЕ КАНВАСОМ
+    # ========================================================================
+    
+    def get_all_blocks(self):
+        return list(self.nodes.values())
+    
+    def clear(self):
+        self.nodes.clear()
+        self.edges.clear()
+        self.scene.clear()
+        self.next_id = 1
+        self._grid_points.clear()
+        self._grid_velocities.clear()
+        self._visible_rect = QRectF()
+        self.scene.update()
+        self.viewport().update()
     
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Delete:
@@ -1363,26 +1308,6 @@ class CanvasWidget(QGraphicsView):
         if event.key() == Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             for node in self.nodes.values():
                 node.setSelected(True)
-            self._update_status(f"✅ Selected {len(self.nodes)} blocks")
-            event.accept()
-            return
-        
-        if event.key() == Qt.Key.Key_A and event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
-            for node in self.nodes.values():
-                node.setSelected(False)
-            for edge in self.edges.values():
-                edge.setSelected(False)
-            self._update_status("Cleared selection")
-            event.accept()
-            return
-        
-        if event.key() == Qt.Key.Key_Delete and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            self.delete_selected_connections()
-            event.accept()
-            return
-        
-        if event.key() == Qt.Key.Key_Delete and event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
-            self.delete_all_blocks()
             event.accept()
             return
         
@@ -1391,11 +1316,68 @@ class CanvasWidget(QGraphicsView):
                 node.setSelected(False)
             for edge in self.edges.values():
                 edge.setSelected(False)
-            self._update_status("Selection cleared")
             event.accept()
             return
         
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            step = self._move_step
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                step = 5
+            
+            dx, dy = 0, 0
+            if event.key() == Qt.Key.Key_Right:
+                dx = step
+            elif event.key() == Qt.Key.Key_Left:
+                dx = -step
+            elif event.key() == Qt.Key.Key_Up:
+                dy = -step
+            elif event.key() == Qt.Key.Key_Down:
+                dy = step
+            else:
+                super().keyPressEvent(event)
+                return
+            
+            if dx != 0 or dy != 0:
+                self.move_selected_nodes(dx, dy)
+                event.accept()
+                return
+        
         super().keyPressEvent(event)
+    
+    def move_selected_nodes(self, dx: float, dy: float):
+        selected_nodes = [node for node in self.nodes.values() if node.isSelected()]
+        if not selected_nodes:
+            return
+        
+        for node in selected_nodes:
+            new_pos = node.pos() + QPointF(dx, dy)
+            node.setPos(new_pos)
+            node.block.position["x"] = new_pos.x()
+            node.block.position["y"] = new_pos.y()
+            for edge in node.edges:
+                edge.update_position()
+            if node.child_nodes:
+                node.move_children(dx, dy)
+        
+        if hasattr(self.parent_window, 'auto_save_project'):
+            self.parent_window.auto_save_project()
+    
+    def on_selection_changed(self):
+        try:
+            selected_items = self.scene.selectedItems()
+            if selected_items:
+                for item in selected_items:
+                    if isinstance(item, GraphNode) and item.block:
+                        self.block_selected.emit(item)
+                        break
+        except Exception as e:
+            print(f"Error in on_selection_changed: {e}")
+    
+    def select_block(self, block_id):
+        if block_id in self.nodes:
+            node = self.nodes[block_id]
+            node.setSelected(True)
+            self.centerOn(node)
     
     def update_nest_states(self):
         dragged_blocks = []
@@ -1416,7 +1398,6 @@ class CanvasWidget(QGraphicsView):
                         node.dragged_node = dragged_blocks[0]
                         if not was_potential:
                             node._show_nest_opportunity(dragged_blocks[0])
-                        self._update_status(f"Drop {dragged_blocks[0].block.name} into {node.block.name}")
                     else:
                         if was_potential:
                             node._clear_nest_opportunity()
@@ -1428,262 +1409,36 @@ class CanvasWidget(QGraphicsView):
                 if node.is_potential_parent:
                     node._clear_nest_opportunity()
     
-    def set_status_label(self, label):
-        self.status_label = label
-    
-    def nest_block(self, child_node, parent_node):
-        if child_node == parent_node:
-            self._update_status("Cannot nest block in itself", is_warning=True)
-            return False
-        if child_node._would_create_cycle(parent_node):
-            self._update_status("Cannot nest: would create cycle", is_warning=True)
-            return False
-        if child_node.parent_node:
-            child_node.parent_node.remove_child(child_node)
-        parent_node.add_child(child_node)
-        child_node.setPos(parent_node.pos().x() + 50, parent_node.pos().y() + 50)
-        child_node.block.parent_id = parent_node.block.id
-        if child_node.block.id not in parent_node.block.children_ids:
-            parent_node.block.children_ids.append(child_node.block.id)
-        child_node.block.modified_at = QDateTime.currentDateTime().toString(Qt.DateFormat.ISODate)
-        parent_node.block.modified_at = QDateTime.currentDateTime().toString(Qt.DateFormat.ISODate)
-        self._create_inheritance_edge(parent_node, child_node)
-        if hasattr(self.parent_window, 'update_explorer'):
-            self.parent_window.update_explorer()
-        if hasattr(self.parent_window, 'auto_save_project'):
-            self.parent_window.auto_save_project()
-        self._update_status(f"✓ Nested '{child_node.block.name}' in '{parent_node.block.name}'")
-        return True
-    
-    def _create_inheritance_edge(self, parent_node, child_node):
-        from ui.SE.core.models import Connection
-        for edge in self.edges.values():
-            if (edge.source == parent_node and edge.destination == child_node and 
-                edge.edge_type == "inheritance"):
+    def _update_status(self, message: str, is_warning: bool = False):
+        try:
+            if not message or message.strip() == "":
                 return
-        conn = Connection(
-            from_block_id=parent_node.block.id,
-            from_port="center",
-            to_block_id=child_node.block.id,
-            to_port="center",
-            data_type="inheritance"
-        )
-        if hasattr(self.parent_window, 'project'):
-            self.parent_window.project.add_connection(conn)
-        self.add_connection(conn, "inheritance")
-    
-    def add_connection(self, connection, connection_type="data"):
-        edge = GraphEdge(connection, self, connection_type)
-        from_node = self.nodes.get(connection.from_block_id)
-        to_node = self.nodes.get(connection.to_block_id)
-        if from_node and to_node:
-            edge.set_source(from_node)
-            edge.set_destination(to_node)
-            self.scene.addItem(edge)
-            self.edges[connection.id] = edge
-            if connection_type != "proxy":
-                from_node.add_edge(edge)
-                to_node.add_edge(edge)
-            print(f"🔗 [CANVAS] Connection added: {from_node.block.name} → {to_node.block.name}")
-            return edge
-        return None
-    
-    def update_connections(self):
-        for edge in self.edges.values():
-            edge.update_position()
-    
-    def remove_connection(self, connection_id):
-        if connection_id in self.edges:
-            edge = self.edges[connection_id]
-            if edge.source:
-                edge.source.remove_edge(edge)
-            if edge.destination:
-                edge.destination.remove_edge(edge)
-            self.scene.removeItem(edge)
-            del self.edges[connection_id]
-            if self.parent_window and hasattr(self.parent_window, 'project'):
-                self.parent_window.project.remove_connection(connection_id)
-            print(f"🔗 [CANVAS] Connection removed: {connection_id}")
-            return True
-        return False
-    
-    def add_block_from_data(self, node_type: str, name: str, x: float = 0, y: float = 0, color: str = "#3498db"):
-        from ui.SE.core.models import Block
-        
-        print(f"🟣 [CANVAS] add_block_from_data - START: type={node_type}, name={name}, pos=({x},{y})")
-        
-        try:
-            block = Block(
-                block_id=self.next_id,
-                node_type=node_type,
-                name=name,
-                x=x,
-                y=y,
-                color=color
-            )
-            print(f"🟣 [CANVAS] Block created: id={block.id}")
             
-            block.params = block.get_default_params()
-            print(f"🟣 [CANVAS] Default params: {block.params}")
-            
-            node = GraphNode(block, self)
-            print(f"🟣 [CANVAS] GraphNode created")
-            
-            self.scene.addItem(node)
-            print(f"🟣 [CANVAS] Node added to scene")
-            
-            self.nodes[block.id] = node
-            print(f"🟣 [CANVAS] Node stored. Total blocks: {len(self.nodes)}")
-            
-            self.next_id += 1
-            print(f"🟣 [CANVAS] next_id now: {self.next_id}")
-            
-            self.scene.clearSelection()
-            node.setSelected(True)
-            self.block_selected.emit(node)
-            
-            self._update_status(f"✓ Block '{name}' added to canvas")
-            print(f"✅ [CANVAS] add_block_from_data - SUCCESS")
-            
-            return node
+            if self.parent_window and hasattr(self.parent_window, 'update_status'):
+                self.parent_window.update_status(message, is_warning)
+            elif self.status_label:
+                self.status_label.setText(message)
+                if is_warning:
+                    self.status_label.setStyleSheet("color: #f39c12;")
+                else:
+                    self.status_label.setStyleSheet("")
         except Exception as e:
-            print(f"❌ [CANVAS] add_block_from_data - ERROR: {e}")
-            import traceback
-            traceback.print_exc()
-            self._update_status(f"✗ Error creating block: {e}", is_warning=True)
-            raise
+            print(f"Error updating status: {e}")
     
-    def get_all_blocks(self):
-        return list(self.nodes.values())
-    
-    def add_block(self, block):
-        print(f"🏗️ [CANVAS] add_block - START: id={block.id}, name={block.name}")
-        
-        try:
-            node = GraphNode(block, self)
-            self.scene.addItem(node)
-            self.nodes[block.id] = node
-            print(f"✅ [CANVAS] add_block - SUCCESS")
-            return node
-        except Exception as e:
-            print(f"❌ [CANVAS] add_block - ERROR: {e}")
-            raise
-    
-    def delete_selected_blocks(self):
-        selected_items = self.scene.selectedItems()
-        blocks_to_delete = [item for item in selected_items if isinstance(item, GraphNode)]
-        
-        if not blocks_to_delete:
-            return False
-        
-        def get_depth(node, depth=0):
-            max_depth = depth
-            for child in node.child_nodes:
-                max_depth = max(max_depth, get_depth(child, depth + 1))
-            return max_depth
-        
-        blocks_to_delete.sort(key=lambda n: get_depth(n), reverse=True)
-        
-        deleted_count = 0
-        for node in blocks_to_delete:
-            if self.remove_block(node.block.id):
-                deleted_count += 1
-        
-        if deleted_count > 0:
-            self._update_status(f"✅ Deleted {deleted_count} blocks")
-            self.block_selected.emit(None)
-            if self.parent_window and hasattr(self.parent_window, 'auto_save_project'):
-                self.parent_window.auto_save_project()
-        
-        return deleted_count > 0
-    
-    def remove_block(self, block_id):
-        print(f"🗑️ [REMOVE BLOCK] Начало: block_id={block_id}")
-        
-        if block_id in self.nodes:
-            node = self.nodes[block_id]
-            print(f"📦 [REMOVE BLOCK] Блок найден: name={node.block.name}")
-            
-            try:
-                edges_to_remove = []
-                for edge_id, edge in self.edges.items():
-                    if edge.source == node or edge.destination == node:
-                        edges_to_remove.append(edge_id)
-                
-                print(f"🔗 [REMOVE BLOCK] Удаление {len(edges_to_remove)} соединений")
-                for edge_id in edges_to_remove:
-                    if self.parent_window and hasattr(self.parent_window, 'project'):
-                        self.parent_window.project.remove_connection(edge_id)
-                    edge = self.edges[edge_id]
-                    if edge.source:
-                        edge.source.remove_edge(edge)
-                    if edge.destination:
-                        edge.destination.remove_edge(edge)
-                    self.scene.removeItem(edge)
-                    del self.edges[edge_id]
-                
-                if node.parent_node:
-                    node.parent_node.remove_child(node)
-                
-                for child in node.child_nodes[:]:
-                    self.remove_block(child.block.id)
-                
-                self.scene.removeItem(node)
-                del self.nodes[block_id]
-                
-                print(f"✅ [REMOVE BLOCK] Блок удален, осталось блоков: {len(self.nodes)}")
-                return True
-            except Exception as e:
-                print(f"❌ [REMOVE BLOCK] Ошибка: {e}")
-                import traceback
-                traceback.print_exc()
-                return False
-        else:
-            print(f"⚠️ [REMOVE BLOCK] Блок с id={block_id} не найден")
-            return False
-
-    def clear(self):
-        print(f"🧹 [CANVAS] clear - START. Blocks: {len(self.nodes)}, Connections: {len(self.edges)}")
-        self.nodes.clear()
-        self.edges.clear()
-        self.scene.clear()
-        self.next_id = 1
-        print(f"✅ [CANVAS] clear - END")
-    
-    def dragEnterEvent(self, event):
-        print("🔵 [CANVAS] dragEnterEvent - START")
-        if event.mimeData().hasText():
-            text = event.mimeData().text()
-            print(f"🔵 [CANVAS] Text: {text[:100]}")
-            event.acceptProposedAction()
-            print("🔵 [CANVAS] Drag accepted")
-        else:
-            print("🔵 [CANVAS] No text, ignoring")
-            event.ignore()
-        print("🔵 [CANVAS] dragEnterEvent - END")
-    
-    def dragMoveEvent(self, event):
-        print("🟢 [CANVAS] dragMoveEvent")
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
+    # ========================================================================
+    # ОБРАБОТЧИКИ СОБЫТИЙ
+    # ========================================================================
     
     def dropEvent(self, event):
-        print("🔴 [CANVAS] dropEvent - START")
-        print(f"🔴 [CANVAS] Drop position: {event.position()}")
-        
         try:
             if event.mimeData().hasText():
                 text_data = event.mimeData().text()
-                print(f"🔴 [CANVAS] Text: {text_data[:100]}")
                 
                 try:
                     data = json.loads(text_data)
                     node_type = data["type"]
                     name = data["name"]
                     color = data["color"]
-                    print(f"🔴 [CANVAS] JSON parsed: type={node_type}, name={name}")
                 except json.JSONDecodeError:
                     node_type = text_data
                     names = {
@@ -1703,28 +1458,34 @@ class CanvasWidget(QGraphicsView):
                         "endsession": ("End Session", "#c0392b")
                     }
                     name, color = names.get(node_type, (node_type, "#3498db"))
-                    print(f"🔴 [CANVAS] String mapped: name={name}")
                 
                 pos = self.mapToScene(event.position().toPoint())
-                print(f"🔴 [CANVAS] Scene pos: ({pos.x()}, {pos.y()})")
-                
-                self.add_block_from_data(node_type, name, pos.x() - 80, pos.y() - 30, color)
+                self.add_block_with_animation(node_type, name, pos.x() - 80, pos.y() - 30, color)
                 event.acceptProposedAction()
-                print("🔴 [CANVAS] Drop accepted")
             else:
-                print("🔴 [CANVAS] No text data")
                 event.ignore()
         except Exception as e:
-            print(f"🔴 [CANVAS] Error: {e}")
+            print(f"Error in dropEvent: {e}")
             import traceback
             traceback.print_exc()
-        
-        print("🔴 [CANVAS] dropEvent - END")
+    
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
     
     def mousePressEvent(self, event):
         item = self.itemAt(event.pos())
         is_block = isinstance(item, GraphNode) or (item and item.parentItem() and isinstance(item.parentItem(), GraphNode))
         is_port = isinstance(item, PortItem)
+        
         if event.button() == Qt.MouseButton.LeftButton:
             if is_block or is_port:
                 self._dragging_block = True
@@ -1749,6 +1510,8 @@ class CanvasWidget(QGraphicsView):
         super().mousePressEvent(event)
     
     def mouseMoveEvent(self, event):
+        self._mouse_scene_pos = self.mapToScene(event.pos())
+        
         if self._is_panning and self._last_pan_pos is not None:
             delta = event.pos() - self._last_pan_pos
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
@@ -1799,52 +1562,4 @@ class CanvasWidget(QGraphicsView):
         delta = new_pos - old_pos
         self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + int(delta.x()))
         self.verticalScrollBar().setValue(self.verticalScrollBar().value() + int(delta.y()))
-        self.update_zoom_display()
         event.accept()
-    
-    def on_selection_changed(self):
-        try:
-            selected_items = self.scene.selectedItems()
-            if selected_items:
-                for item in selected_items:
-                    if isinstance(item, GraphNode) and item.block:
-                        self.block_selected.emit(item)
-                        break
-        except Exception as e:
-            print(f"Error in on_selection_changed: {e}")
-    
-    def select_block(self, block_id):
-        if block_id in self.nodes:
-            node = self.nodes[block_id]
-            node.setSelected(True)
-            self.centerOn(node)
-            print(f"🎯 [CANVAS] Selected block: {node.block.name}")
-    
-    def drawBackground(self, painter, rect):
-        super().drawBackground(painter, rect)
-        if self.grid_enabled:
-            self.draw_grid(painter, rect)
-    
-    def draw_grid(self, painter, rect):
-        painter.setPen(QPen(QColor("#333333"), 1))
-        left = int(rect.left()) - (int(rect.left()) % self.grid_size)
-        top = int(rect.top()) - (int(rect.top()) % self.grid_size)
-        right = int(rect.right())
-        bottom = int(rect.bottom())
-        step = self.grid_size
-        x = left
-        while x <= right:
-            painter.drawLine(x, int(rect.top()), x, int(rect.bottom()))
-            x += step
-        y = top
-        while y <= bottom:
-            painter.drawLine(int(rect.left()), y, int(rect.right()), y)
-            y += step
-        painter.setPen(QPen(QColor("#555555"), 2))
-        painter.drawLine(-10, 0, 10, 0)
-        painter.drawLine(0, -10, 0, 10)
-    
-    def update_zoom_display(self):
-        if self.parent_window:
-            if hasattr(self.parent_window, 'update_zoom_label'):
-                self.parent_window.update_zoom_label(self.zoom_factor)

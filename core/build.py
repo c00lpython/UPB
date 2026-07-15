@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QProgressBar
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QDateTime
+from ui.animated_button import AnimatedButton, GradientFollowButton
 
 
 class BuildWorker(QThread):
@@ -414,35 +415,33 @@ class BuildWidget(QWidget):
 
         layout.addWidget(settings_group)
 
-        # Кнопки
+        # ========== АНИМИРОВАННЫЕ КНОПКИ ==========
         actions_layout = QHBoxLayout()
         actions_layout.setSpacing(10)
 
-        self.build_btn = QPushButton("🚀 Собрать парсер")
-        self.build_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0e639c; color: white; padding: 10px 25px;
-                border: none; border-radius: 4px; font-weight: bold; font-size: 14px;
-            }
-            QPushButton:hover { background-color: #1177bb; }
-            QPushButton:disabled { background-color: #3c3c3c; color: #787878; }
-        """)
+        self.build_btn = AnimatedButton("🚀 Собрать парсер")
+        self.build_btn.setProperty("type", "primary")
+        self.build_btn.setMinimumHeight(40)
         self.build_btn.clicked.connect(self.start_build)
 
-        self.open_folder_btn = QPushButton("📂 Открыть папку")
-        self.open_folder_btn.setStyleSheet("background-color: #3c3c3c; color: #cccccc; padding: 10px 25px; border: none; border-radius: 4px;")
+        self.open_folder_btn = AnimatedButton("📂 Открыть папку")
+        self.open_folder_btn.setProperty("type", "default")
+        self.open_folder_btn.setMinimumHeight(40)
         self.open_folder_btn.clicked.connect(self.open_project_folder)
 
-        self.clear_btn = QPushButton("🧹 Очистить проект")
-        self.clear_btn.setStyleSheet("background-color: #3c3c3c; color: #cccccc; padding: 10px 25px; border: none; border-radius: 4px;")
+        self.clear_btn = AnimatedButton("🧹 Очистить проект")
+        self.clear_btn.setProperty("type", "danger")
+        self.clear_btn.setMinimumHeight(40)
         self.clear_btn.clicked.connect(self.clear_build)
 
-        self.save_config_btn = QPushButton("💾 Сохранить настройки")
-        self.save_config_btn.setStyleSheet("background-color: #3c3c3c; color: #cccccc; padding: 10px 25px; border: none; border-radius: 4px;")
+        self.save_config_btn = AnimatedButton("💾 Сохранить настройки")
+        self.save_config_btn.setProperty("type", "primary")
+        self.save_config_btn.setMinimumHeight(40)
         self.save_config_btn.clicked.connect(self.save_build_config)
 
-        self.reset_config_btn = QPushButton("🔄 Сбросить настройки")
-        self.reset_config_btn.setStyleSheet("background-color: #3c3c3c; color: #cccccc; padding: 10px 25px; border: none; border-radius: 4px;")
+        self.reset_config_btn = AnimatedButton("🔄 Сбросить настройки")
+        self.reset_config_btn.setProperty("type", "default")
+        self.reset_config_btn.setMinimumHeight(40)
         self.reset_config_btn.clicked.connect(self.reset_build_config)
 
         actions_layout.addWidget(self.build_btn)
@@ -564,7 +563,6 @@ class BuildWidget(QWidget):
 
             self.build_btn.setEnabled(True)
 
-            # ЗАГРУЖАЕМ НАСТРОЙКИ ПРИ КАЖДОМ ПЕРЕКЛЮЧЕНИИ ПРОЕКТА
             if old_project != project_name:
                 self.load_build_config()
                 self._config_loaded = True
