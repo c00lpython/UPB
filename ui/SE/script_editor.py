@@ -23,8 +23,8 @@ class ScriptEditor(QWidget):
         self.project_manager = project_manager
         self.current_project = None
         self.current_workflow_file = None
-        self.variables = {}  # Хранилище переменных из variables.xlsx
-        self.variables_path = None  # Путь к файлу variables.xlsx
+        self.variables = {}
+        self.variables_path = None
         
         self.init_ui()
     
@@ -79,9 +79,6 @@ class ScriptEditor(QWidget):
         bottom_layout.setContentsMargins(15, 8, 15, 8)
         bottom_layout.setSpacing(15)
         
-        # ui/SE/script_editor.py
-
-        # ========== ВСЕ КНОПКИ СО СВЕЧЕНИЕМ ==========
         self.btn_compile = GradientFollowButton("⚙️ Compile to Script")
         self.btn_compile.setProperty("type", "primary")
         self.btn_compile.setMinimumWidth(160)
@@ -89,8 +86,8 @@ class ScriptEditor(QWidget):
         self.btn_compile.setFixedHeight(38)
         self.btn_compile.clicked.connect(self.compile_workflow)
 
-        self.btn_clear = GradientFollowButton("🗑️ Clear Canvas")  # Тоже с эффектом свечения
-        self.btn_clear.setProperty("type", "danger")  # Красный цвет
+        self.btn_clear = GradientFollowButton("🗑️ Clear Canvas")
+        self.btn_clear.setProperty("type", "danger")
         self.btn_clear.setMinimumWidth(120)
         self.btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clear.setFixedHeight(38)
@@ -164,7 +161,6 @@ class ScriptEditor(QWidget):
     
     def on_property_changed(self, block_id, prop_name, value):
         self.update_status(f"Updated {prop_name} = {str(value)[:40]}")
-        # Автосохранение после изменения свойства
         if self.project_manager and self.project_manager.current_project:
             self.auto_save_workflow()
     
@@ -219,7 +215,6 @@ class ScriptEditor(QWidget):
                 self.update_status(f"📦 Loaded {len(self.variables)} variables from variables.xlsx")
                 print(f"✅ Загружено {len(self.variables)} переменных из {variables_file}")
                 
-                # Обновляем Properties Editor (если открыт блок с переменными)
                 if self.properties.current_block:
                     self.properties.refresh()
                     
@@ -263,7 +258,6 @@ class ScriptEditor(QWidget):
         script_path = os.path.join(project_path, "script.txt")
         
         try:
-            # Используем компилятор из core.compiler
             compiler = UPBCompiler(workflow_file, self.variables_path)
             script = compiler.compile(mode="chain")
             compiler.save(script_path, mode="chain")
@@ -341,7 +335,6 @@ class ScriptEditor(QWidget):
             QMessageBox.warning(self, "Not Found", f"No workflow.json found in project folder!")
             return
         
-        # Спрашиваем подтверждение
         if len(self.canvas.get_all_blocks()) > 0:
             reply = QMessageBox.question(self, "Load Workflow", 
                                          "Current workflow will be lost. Continue?",
@@ -352,6 +345,9 @@ class ScriptEditor(QWidget):
         success = upb_serializer.load_project(workflow_file, self.canvas)
         
         if success:
+            # ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ВСЕ СОЕДИНЕНИЯ ПОСЛЕ ЗАГРУЗКИ
+            self.canvas.update_all_connections()
+            
             self.current_workflow_file = workflow_file
             self.update_status(f"✅ Workflow loaded from {workflow_file}")
             QMessageBox.information(self, "Success", f"Workflow loaded!\n\nBlocks: {len(self.canvas.get_all_blocks())}")
@@ -379,7 +375,6 @@ class ScriptEditor(QWidget):
             project_path = os.path.join(self.project_manager.projects_dir, self.project_manager.current_project)
             workflow_file = os.path.join(project_path, "workflow.json")
             upb_serializer.save_project(self.canvas, workflow_file)
-            # Не выводим уведомление при автосохранении
     
     # ========================================================================
     # Управление проектом
@@ -415,6 +410,9 @@ class ScriptEditor(QWidget):
                 # Загружаем сохранённый workflow
                 success = upb_serializer.load_project(workflow_file, self.canvas)
                 if success:
+                    # ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ВСЕ СОЕДИНЕНИЯ ПОСЛЕ ЗАГРУЗКИ
+                    self.canvas.update_all_connections()
+                    
                     self.update_status(f"📁 Loaded workflow for: {project_name}")
                     block_count = len(self.canvas.get_all_blocks())
                     self.block_count_label.setText(f"{block_count} blocks")
