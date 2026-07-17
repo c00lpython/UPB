@@ -1,5 +1,3 @@
-# core/profile_manager.py
-
 import os
 import shutil
 from PySide6.QtWebEngineCore import QWebEngineProfile

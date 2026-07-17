@@ -1,13 +1,12 @@
 # ui/main_window.py
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QSplitter, QFrame, QLabel, QTextEdit,
+    QSplitter, QFrame, QLabel, QPushButton, QTextEdit,
     QStackedWidget, QListWidget, QListWidgetItem, QLineEdit,
-    QGroupBox, QGridLayout, QMessageBox, QInputDialog, QSizePolicy, QPushButton,
-    QApplication
+    QGroupBox, QGridLayout, QMessageBox, QInputDialog, QSizePolicy
 )
-from PySide6.QtCore import Qt, QDateTime, QUrl, QTimer, Signal, QObject, Property, QPoint, QEasingCurve, QPropertyAnimation, QEvent
-from PySide6.QtGui import QKeyEvent, QPixmap, QPainter, QColor, QBrush, QRadialGradient, QCursor, QPen
+from PySide6.QtCore import Qt, QDateTime, QUrl, QTimer, Signal
+from PySide6.QtGui import QKeyEvent, QPixmap
 from ui.browser_widget import BrowserWidget
 from ui.vm_table import VmTable
 from ui.SE.script_editor import ScriptEditor
@@ -19,194 +18,8 @@ import json
 import uuid
 import sys
 import psutil
-import threading
-import time
 from datetime import datetime
 
-
-# ============================================================================
-# ГЛОБАЛЬНЫЙ ТРЕКЕР МЫШИ
-# ============================================================================
-
-class MouseTracker(QObject):
-    """Глобальный трекер мыши с отдельным потоком"""
-    
-    mouse_moved = Signal(int, int)  # x, y в глобальных координатах
-    widget_hovered = Signal(object)  # виджет под курсором
-    
-    def __init__(self):
-        super().__init__()
-        self._running = False
-        self._thread = None
-        self._cursor_pos = QCursor.pos()
-        self._last_widget = None
-        
-    def start(self):
-        """Запускает поток отслеживания"""
-        if self._running:
-            return
-        self._running = True
-        self._thread = threading.Thread(target=self._track_mouse, daemon=True)
-        self._thread.start()
-        print("🖱️ Mouse tracker started")
-        
-    def stop(self):
-        """Останавливает поток"""
-        self._running = False
-        if self._thread:
-            self._thread.join(timeout=0.5)
-        print("🖱️ Mouse tracker stopped")
-            
-    def _track_mouse(self):
-        """Основной цикл отслеживания в отдельном потоке"""
-        while self._running:
-            try:
-                # Получаем текущую позицию курсора
-                current_pos = QCursor.pos()
-                x, y = current_pos.x(), current_pos.y()
-                
-                # Эмитим сигнал с координатами
-                self.mouse_moved.emit(x, y)
-                
-                # Определяем виджет под курсором
-                widget = QApplication.widgetAt(current_pos)
-                if widget != self._last_widget:
-                    self._last_widget = widget
-                    self.widget_hovered.emit(widget)
-                    
-                time.sleep(0.016)  # ~60 FPS
-            except Exception as e:
-                print(f"Mouse tracker error: {e}")
-                time.sleep(0.1)
-
-
-# Создаем глобальный экземпляр трекера
-mouse_tracker = MouseTracker()
-
-
-# ============================================================================
-# MIXIN ДЛЯ ЭФФЕКТА СВЕЧЕНИЯ
-# ============================================================================
-
-class GlowEffectMixin:
-    """Миксин для добавления эффекта свечения к виджетам с глобальным трекером"""
-    
-    def __init__(self):
-        self._mouse_pos = (0.5, 0.5)
-        self._hover_progress = 0.0
-        self._show_glow = False
-        self._is_hovering = False
-        self._target_progress = 0.0
-        
-        # Анимация для плавного появления свечения
-        self.hover_anim = QPropertyAnimation(self, b"hover_progress")
-        self.hover_anim.setDuration(150)
-        self.hover_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        
-        # Подключаемся к глобальному трекеру
-        self._setup_global_tracker()
-    
-    def _setup_global_tracker(self):
-        """Подключается к глобальному трекеру мыши"""
-        global mouse_tracker
-        mouse_tracker.mouse_moved.connect(self._on_global_mouse_move)
-        mouse_tracker.widget_hovered.connect(self._on_global_widget_hover)
-    
-    def _on_global_mouse_move(self, x, y):
-        """Обработчик движения мыши от глобального трекера"""
-        if not self._is_hovering:
-            return
-            
-        # Получаем позицию мыши относительно виджета
-        widget_pos = self.mapFromGlobal(QPoint(x, y))
-        rect = self.rect()
-        
-        if rect.contains(widget_pos):
-            # Нормализуем координаты (0-1)
-            if rect.width() > 0 and rect.height() > 0:
-                norm_x = widget_pos.x() / rect.width()
-                norm_y = widget_pos.y() / rect.height()
-                self._mouse_pos = (max(0, min(1, norm_x)), max(0, min(1, norm_y)))
-                self.update()
-    
-    def _on_global_widget_hover(self, widget):
-        """Обработчик смены виджета под курсором"""
-        # Проверяем, является ли виджет нами или нашим потомком
-        is_over = widget == self or (widget and self.isAncestorOf(widget)) if widget else False
-        
-        if is_over and not self._is_hovering:
-            # Мышь вошла в виджет
-            self._is_hovering = True
-            self._show_glow = True
-            self._target_progress = 1.0
-            self.hover_anim.stop()
-            self.hover_anim.setStartValue(self._hover_progress)
-            self.hover_anim.setEndValue(1.0)
-            self.hover_anim.start()
-            
-        elif not is_over and self._is_hovering:
-            # Мышь вышла из виджета
-            self._is_hovering = False
-            self._show_glow = False
-            self._target_progress = 0.0
-            self.hover_anim.stop()
-            self.hover_anim.setStartValue(self._hover_progress)
-            self.hover_anim.setEndValue(0.0)
-            self.hover_anim.start()
-    
-    @Property(float)
-    def hover_progress(self):
-        return self._hover_progress
-    
-    @hover_progress.setter
-    def hover_progress(self, value):
-        if abs(self._hover_progress - value) > 0.001:
-            self._hover_progress = value
-            self.update()
-    
-    def paint_glow_effect(self, painter):
-        """Рисует эффект свечения"""
-        if self._is_hovering and self._hover_progress > 0.01:
-            painter.save()
-            
-            rect = self.rect()
-            x, y = self._mouse_pos
-            
-            center_x = rect.width() * x
-            center_y = rect.height() * y
-            radius = max(rect.width(), rect.height()) * 0.5 * self._hover_progress
-            
-            gradient = QRadialGradient(
-                center_x, center_y, radius,
-                center_x, center_y
-            )
-            
-            # Цвет свечения (фиолетовый)
-            color = QColor(155, 89, 182)
-            alpha = int(40 * self._hover_progress)
-            color.setAlpha(alpha)
-            
-            gradient.setColorAt(0, color)
-            gradient.setColorAt(1, QColor(color.red(), color.green(), color.blue(), 0))
-            
-            painter.setBrush(QBrush(gradient))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(rect, 4, 4)
-            
-            # Светящаяся рамка
-            pen_color = QColor(155, 89, 182)
-            pen_alpha = int(60 * self._hover_progress)
-            pen_color.setAlpha(pen_alpha)
-            painter.setPen(QPen(pen_color, 1.5))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(rect.adjusted(1, 1, -2, -2), 4, 4)
-            
-            painter.restore()
-
-
-# ============================================================================
-# MAIN WINDOW
-# ============================================================================
 
 class MainWindow(QMainWindow):
     about_to_close = Signal()
@@ -274,33 +87,12 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(2000, self.auto_open_latest_project)
         
         self.start_time = datetime.now()
-        
-        # ========== ОПТИМИЗИРОВАННЫЙ ТАЙМЕР СТАТИСТИКИ ==========
         self.stats_timer = QTimer()
         self.stats_timer.timeout.connect(self.update_system_stats)
-        self.stats_timer.start(5000)  # ← 5 секунд вместо 2 для уменьшения нагрузки
-        
-        # Отслеживаем активность окна для оптимизации
-        self._is_window_active = True
-        self.installEventFilter(self)
+        self.stats_timer.start(2000)
         
         self.log("🚀 UPB v2.0 Ready")
         self.log("💡 Select mode: OFF (Press Ctrl+Shift+C to toggle)")
-        
-        # Запускаем глобальный трекер мыши
-        global mouse_tracker
-        mouse_tracker.start()
-    
-    def eventFilter(self, obj, event):
-        """Отслеживаем активность окна для оптимизации"""
-        if event.type() == QEvent.Type.WindowActivate:
-            self._is_window_active = True
-            if not self.stats_timer.isActive():
-                self.stats_timer.start(5000)
-        elif event.type() == QEvent.Type.WindowDeactivate:
-            self._is_window_active = False
-            self.stats_timer.stop()
-        return super().eventFilter(obj, event)
 
     def _set_browser_ready(self):
         self._browser_ready = True
@@ -562,7 +354,6 @@ class MainWindow(QMainWindow):
         separator.setProperty("separator", True)
         layout.addWidget(separator)
         
-        # ========== АНИМИРОВАННЫЕ ТАБЫ ==========
         self.tab_browser = TabButton("Browser")
         self.tab_project = TabButton("Project")
         self.tab_vm = TabButton("VM")
@@ -990,6 +781,7 @@ class MainWindow(QMainWindow):
             
             self._replace_browser_widget(new_browser)
             
+            # ========== ЗАГРУЗКА ПЕРЕМЕННЫХ В VM ТАБЛИЦУ ==========
             if hasattr(self, 'vm_table'):
                 self.vm_table.clear_all()
                 for var in project_data.get('variables', []):
@@ -1332,45 +1124,29 @@ chat_id =
         self.btn_run.clicked.connect(self.on_run_clicked)
 
     def update_system_stats(self):
-        """Обновление системной статистики (оптимизировано)"""
         try:
-            # Обновляем только если изменились значения
-            cpu_percent = psutil.cpu_percent(interval=0.1)
+            cpu_percent = psutil.cpu_percent(interval=0.5)
+            self.cpu_label.setText(f"💻 CPU: {cpu_percent:.0f}%")
+            
             mem = psutil.virtual_memory()
             used_mb = mem.used / (1024 * 1024)
             total_mb = mem.total / (1024 * 1024)
-            
-            # Формируем новые значения
-            new_cpu = f"💻 CPU: {cpu_percent:.0f}%"
-            new_ram = f"🧠 RAM: {used_mb:.0f}/{total_mb:.0f}MB"
+            self.ram_label.setText(f"🧠 RAM: {used_mb:.0f}/{total_mb:.0f}MB")
             
             elapsed = datetime.now() - self.start_time
             hours = elapsed.seconds // 3600
             minutes = (elapsed.seconds % 3600) // 60
             seconds = elapsed.seconds % 60
-            new_uptime = f"⏱️ Uptime: {hours:02d}:{minutes:02d}:{seconds:02d}"
+            self.uptime_label.setText(f"⏱️ Uptime: {hours:02d}:{minutes:02d}:{seconds:02d}")
             
             if hasattr(self, 'project_manager'):
                 projects = self.project_manager.get_all_projects()
-                new_projects = f"📁 Projects: {len(projects)}"
-            else:
-                new_projects = "📁 Projects: 0"
-            
-            # Обновляем только если изменились
-            if self.cpu_label.text() != new_cpu:
-                self.cpu_label.setText(new_cpu)
-            if self.ram_label.text() != new_ram:
-                self.ram_label.setText(new_ram)
-            if self.uptime_label.text() != new_uptime:
-                self.uptime_label.setText(new_uptime)
-            if self.projects_label.text() != new_projects:
-                self.projects_label.setText(new_projects)
+                self.projects_label.setText(f"📁 Projects: {len(projects)}")
                 
         except ImportError:
-            if self.cpu_label.text() != "💻 CPU: N/A":
-                self.cpu_label.setText("💻 CPU: N/A")
-                self.ram_label.setText("🧠 RAM: N/A")
-                self.uptime_label.setText("⏱️ Uptime: N/A")
+            self.cpu_label.setText("💻 CPU: N/A")
+            self.ram_label.setText("🧠 RAM: N/A")
+            self.uptime_label.setText("⏱️ Uptime: N/A")
         except Exception:
             pass
 
@@ -1574,10 +1350,6 @@ chat_id =
 
     def closeEvent(self, event):
         print("\n🛑 Closing application...")
-        
-        # Останавливаем трекер мыши
-        global mouse_tracker
-        mouse_tracker.stop()
         
         if hasattr(self, 'stats_timer'):
             self.stats_timer.stop()
